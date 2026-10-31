@@ -1,6 +1,11 @@
-import { Navigate, NavLink, Route, Routes } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
+import { BaseToast } from "./components/Shared.jsx";
+import { API_ERROR_EVENT } from "./js/apiClient.js";
+import { useAuth } from "./js/AuthContext.jsx";
 import CrawlerDashboard from "./views/crawler/CrawlerDashboard.jsx";
 import UrlGenerator from "./views/url/UrlGenerator.jsx";
+import { LoginPage, SignupPage, VerifyEmailPage } from "./views/auth/AuthPages.jsx";
 
 function Sidebar() {
   return (
@@ -24,6 +29,7 @@ function Sidebar() {
 }
 
 function Navbar() {
+  const { user, logout } = useAuth();
   return (
     <header className="m-navbar">
       <div className="branch-name-wrapper">
@@ -37,27 +43,56 @@ function Navbar() {
       <div className="m-space" />
       <div className="m-dropdown-user">
         <div className="m-icon icon--avatar" />
-        <div className="display-user">Nguyễn Hữu Lộc</div>
+        <div className="display-user">{user?.email}</div>
+        <button className="auth-logout" type="button" onClick={logout}>Sign out</button>
       </div>
     </header>
   );
 }
 
-export default function App() {
+function ProtectedLayout() {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return <div className="auth-loading">Loading your session...</div>;
+  if (!user) return <Navigate to="/login" replace />;
+
   return (
     <div className="m-app-body">
       <Sidebar />
       <div className="m-app-content">
         <Navbar />
-        <main className="m-content">
-          <Routes>
-            <Route path="/" element={<Navigate to="/CA" replace />} />
-            <Route path="/CA" element={<CrawlerDashboard />} />
-            <Route path="/URL" element={<UrlGenerator />} />
-            <Route path="*" element={<Navigate to="/CA" replace />} />
-          </Routes>
-        </main>
+        <main className="m-content"><Outlet /></main>
       </div>
     </div>
+  );
+}
+
+export default function App() {
+  const [apiErrorToast, setApiErrorToast] = useState("");
+
+  useEffect(() => {
+    const handleApiError = (event) => setApiErrorToast(event.detail);
+    window.addEventListener(API_ERROR_EVENT, handleApiError);
+    return () => window.removeEventListener(API_ERROR_EVENT, handleApiError);
+  }, []);
+
+  return (
+    <>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route element={<ProtectedLayout />}>
+          <Route path="/" element={<Navigate to="/CA" replace />} />
+          <Route path="/CA" element={<CrawlerDashboard />} />
+          <Route path="/URL" element={<UrlGenerator />} />
+          <Route path="*" element={<Navigate to="/CA" replace />} />
+        </Route>
+      </Routes>
+      <BaseToast
+        type="error"
+        content={apiErrorToast}
+        onClose={() => setApiErrorToast("")}
+      />
+    </>
   );
 }

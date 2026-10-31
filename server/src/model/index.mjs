@@ -24,7 +24,9 @@ const crawlerSchema = new mongoose.Schema({
     urls: { type: Array },
     description: {type: String },
     modifiedDate: { type: Date },
-    performance: {type: String}
+    performance: {type: String},
+    cronExpression: { type: String, trim: true, default: "" },
+    headless: { type: Boolean, default: process.env.PUPPETEER_HEADLESS === "true" }
 })
 
 export const Crawlers = mongoose.model('crawler', crawlerSchema)

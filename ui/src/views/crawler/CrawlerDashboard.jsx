@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import axios from "axios";
+import apiClient from "../../js/apiClient.js";
 import BASE_API from "../../js/resources/resourceAPI";
 import ENUM from "../../js/resources/resourceEnum";
 import CrawlerDetail from "./CrawlerDetail.jsx";
@@ -31,7 +31,7 @@ export default function CrawlerDashboard() {
 
   const loadTable = useCallback(async () => {
     try {
-      const { data } = await axios.get(BASE_API.CRAWLER);
+      const { data } = await apiClient.get(BASE_API.CRAWLER);
       setCrawlers(Array.isArray(data.Data) ? data.Data : []);
       setOverview({
         totalUrls: data.TotalUrls ?? 0,
@@ -58,6 +58,7 @@ export default function CrawlerDashboard() {
         crawler.crawlerName,
         crawler.description,
         crawler.selectorType,
+        crawler.status,
       ]
         .join(" ")
         .toLowerCase()
@@ -67,7 +68,7 @@ export default function CrawlerDashboard() {
 
   const openCrawler = async (crawler) => {
     try {
-      const { data } = await axios.get(
+      const { data } = await apiClient.get(
         BASE_API.CRAWLER_CODE(crawler.crawlerCode),
       );
       setDetail({
@@ -78,6 +79,7 @@ export default function CrawlerDashboard() {
       });
       setPopover(null);
     } catch (error) {
+      if (error.response?.status >= 400 && error.response.status < 500) return;
       setToast({
         type: ENUM.toastEnum.error,
         content: `Unable to open crawler: ${error.message}`,
@@ -87,14 +89,15 @@ export default function CrawlerDashboard() {
 
   const createCrawler = async () => {
     try {
-      const { data } = await axios.get(BASE_API.CRAWLER_NEW_CODE);
+      const { data } = await apiClient.get(BASE_API.CRAWLER_NEW_CODE);
       setDetail({
         mode: ENUM.formMode.Add,
-        crawler: { crawlerCode: `CRWL-${data}`, urls: [] },
+        crawler: { crawlerCode: `CRWL-${data}`, urls: [], headless: true },
         selectors: [{}],
         outputs: [],
       });
     } catch (error) {
+      if (error.response?.status >= 400 && error.response.status < 500) return;
       setToast({
         type: ENUM.toastEnum.error,
         content: `Unable to create a crawler: ${error.message}`,
@@ -104,12 +107,13 @@ export default function CrawlerDashboard() {
 
   const deleteCrawler = async (crawler) => {
     try {
-      await axios.delete(BASE_API.CRAWLER_CODE(crawler.crawlerCode));
+      await apiClient.delete(BASE_API.CRAWLER_CODE(crawler.crawlerCode));
       setCrawlers((current) =>
         current.filter((item) => item.crawlerCode !== crawler.crawlerCode),
       );
       setToast({ type: "success", content: "Crawler deleted successfully." });
     } catch (error) {
+      if (error.response?.status >= 400 && error.response.status < 500) return;
       setToast({
         type: "error",
         content: `Unable to delete crawler: ${error.message}`,
@@ -173,10 +177,12 @@ export default function CrawlerDashboard() {
               <th className="m-th" style={{ width: 50 }}>#</th>
               <th className="m-th" style={{ width: 150 }}>Crawler Code</th>
               <th className="m-th" style={{ width: 250 }}>Crawler Name</th>
+              <th className="m-th" style={{ width: 90 }}>Status</th>
               <th className="m-th max-w-320">Description</th>
               <th className="m-th" style={{ width: 150 }}>Selector Type</th>
               <th className="m-th" style={{ width: 150 }}>Last modified</th>
               <th className="m-th" style={{ width: 120 }}>Performance (s)</th>
+              <th className="m-th" style={{ width: 150 }}>Schedule</th>
               <th className="m-th">Task</th>
             </tr>
           </thead>
@@ -191,6 +197,11 @@ export default function CrawlerDashboard() {
                 <td className="m-td text-align-center">{index + 1}</td>
                 <td className="m-td text-align-center">{crawler.crawlerCode}</td>
                 <td className="m-td">{crawler.crawlerName}</td>
+                <td className="m-td text-align-center">
+                  <span className={`crawler-dashboard-status ${crawler.status === "NEW" ? "is-new" : "is-read"}`}>
+                    {crawler.status || "READ"}
+                  </span>
+                </td>
                 <td
                   className="m-td text-overflow-hidden max-w-320"
                   title={crawler.description}
@@ -203,6 +214,9 @@ export default function CrawlerDashboard() {
                   {crawler.performance
                     ? Number.parseFloat(crawler.performance).toPrecision(4)
                     : "None"}
+                </td>
+                <td className="m-td text-align-center">
+                  {crawler.cronExpression || "Manual"}
                 </td>
                 <td className="m-td flex align-center justify-center">
                   <button
@@ -230,7 +244,7 @@ export default function CrawlerDashboard() {
             ))}
             {visibleCrawlers.length === 0 && !loadError && (
               <tr className="m-tr">
-                <td className="m-td text-align-center" colSpan={9}>
+                <td className="m-td text-align-center" colSpan={11}>
                   No crawlers found.
                 </td>
               </tr>

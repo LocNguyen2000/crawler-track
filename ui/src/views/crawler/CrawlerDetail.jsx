@@ -1,9 +1,11 @@
-import { useState } from "react";
-import axios from "axios";
+import { useRef, useState } from "react";
+import apiClient from "../../js/apiClient.js";
 import BASE_API from "../../js/resources/resourceAPI";
 import ENUM from "../../js/resources/resourceEnum";
 import resources from "../../js/resources/resourceMsg";
 import { BaseInput } from "../../components/Shared.jsx";
+
+const crawlerStatusKey = "__crawlerStatus";
 
 function downloadCsv(filename, rows) {
   const contents = rows
@@ -38,19 +40,93 @@ export default function CrawlerDetail({
   const [crawler, setCrawler] = useState({
     ...initialCrawler,
     urls: initialCrawler.urls || [],
+    headless: initialCrawler.headless ?? true,
   });
-  const [selectors, setSelectors] = useState(
-    initialSelectors?.length ? initialSelectors : [{}],
-  );
+  const nextSelectorKey = useRef(initialSelectors?.length || 1);
+  const [selectors, setSelectors] = useState(() => {
+    const initialRows = initialSelectors?.length ? initialSelectors : [{}];
+    return initialRows.map((selector, index) => ({
+      ...selector,
+      clientKey: selector.id || selector._id || `selector-${index}`,
+    }));
+  });
   const [outputs, setOutputs] = useState(initialOutputs || []);
   const [activeTab, setActiveTab] = useState(0);
   const [detailSelectorIndex, setDetailSelectorIndex] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [urlInput, setUrlInput] = useState("");
   const [isSaved, setIsSaved] = useState(mode !== ENUM.formMode.Add);
   const [saving, setSaving] = useState(false);
+  const [recordingSelectors, setRecordingSelectors] = useState(false);
+  const [extractingData, setExtractingData] = useState(false);
+  const outputFields = outputs.length
+    ? Object.keys(outputs[0]).filter((key) => key !== crawlerStatusKey)
+    : [];
+  const orderedOutputs = [...outputs].sort(
+    (left, right) =>
+      Number(right[crawlerStatusKey] === "NEW") -
+      Number(left[crawlerStatusKey] === "NEW"),
+  );
 
   const updateCrawler = (name, value) => {
     setCrawler((current) => ({ ...current, [name]: value }));
+  };
+
+  const addUrl = () => {
+    const enteredUrls = urlInput
+      .split(/\r?\n/)
+      .map((url) => url.trim())
+      .filter(Boolean);
+    const knownUrls = new Set(crawler.urls);
+    const urlsToAdd = [];
+    let invalidCount = 0;
+    let duplicateCount = 0;
+
+    for (const url of enteredUrls) {
+      let parsedUrl;
+      try {
+        parsedUrl = new URL(url);
+      } catch {
+        parsedUrl = null;
+      }
+
+      if (!parsedUrl || !["http:", "https:"].includes(parsedUrl.protocol)) {
+        invalidCount++;
+      } else if (knownUrls.has(url)) {
+        duplicateCount++;
+      } else {
+        knownUrls.add(url);
+        urlsToAdd.push(url);
+      }
+    }
+
+    if (urlsToAdd.length) {
+      updateCrawler("urls", [...crawler.urls, ...urlsToAdd]);
+    }
+    setUrlInput("");
+
+    if (invalidCount || duplicateCount) {
+      const skipped = [
+        invalidCount && `${invalidCount} invalid`,
+        duplicateCount && `${duplicateCount} duplicate`,
+      ].filter(Boolean);
+      onPopup({
+        type: urlsToAdd.length ? ENUM.popupEnum.warning : ENUM.popupEnum.alert,
+        content: `${urlsToAdd.length} URL(s) added. Skipped ${skipped.join(" and ")} line(s).`,
+      });
+    } else if (!urlsToAdd.length) {
+      onPopup({
+        type: ENUM.popupEnum.alert,
+        content: "Enter one or more URLs, one per line.",
+      });
+    }
+  };
+
+  const removeUrl = (indexToRemove) => {
+    updateCrawler(
+      "urls",
+      crawler.urls.filter((_, index) => index !== indexToRemove),
+    );
   };
 
   const updateSelector = (index, name, value) => {
@@ -61,6 +137,23 @@ export default function CrawlerDetail({
           : selector,
       ),
     );
+  };
+
+  const addSelector = () => {
+    const index = selectors.length;
+    setSelectors((current) => [
+      ...current,
+      {
+        index,
+        clientKey: `selector-${nextSelectorKey.current++}`,
+        metadata: "",
+        selectorCSS: "",
+        selectorXPath: "",
+        tag: "",
+        eventType: "",
+      },
+    ]);
+    setDetailSelectorIndex(index);
   };
 
   const importFile = async (event) => {
@@ -114,7 +207,7 @@ export default function CrawlerDetail({
     if (!crawler.urls?.length) {
       onPopup({
         type: ENUM.popupEnum.alert,
-        content: "User must import a CSV or Excel file containing URLs.",
+        content: "Add at least one URL manually or import a CSV or Excel file.",
       });
       return;
     }
@@ -122,20 +215,25 @@ export default function CrawlerDetail({
     setSaving(true);
     try {
       if (mode === ENUM.formMode.Add && !isSaved) {
-        await axios.post(BASE_API.CRAWLER, { crawler, selectors });
+        await apiClient.post(BASE_API.CRAWLER, { crawler, selectors });
         setIsSaved(true);
         onToast(resources.toastMsg.addSuccessMsg, ENUM.toastEnum.success);
       } else {
-        await axios.put(BASE_API.CRAWLER_CODE(crawler.crawlerCode), {
+        await apiClient.put(BASE_API.CRAWLER_CODE(crawler.crawlerCode), {
           crawler,
           selectors,
         });
         onToast(resources.toastMsg.updateSuccessMsg, ENUM.toastEnum.success);
       }
     } catch (error) {
+      const responseMessage = error.response?.data;
       onPopup({
         type: ENUM.popupEnum.alert,
-        content: `Unable to save crawler: ${error.response?.data?.message || error.message}`,
+        content: `Unable to save crawler: ${
+          typeof responseMessage === "string"
+            ? responseMessage
+            : responseMessage?.message || error.message
+        }`,
       });
     } finally {
       setSaving(false);
@@ -143,8 +241,9 @@ export default function CrawlerDetail({
   };
 
   const extractSelectors = async () => {
+    setRecordingSelectors(true);
     try {
-      const { data } = await axios.post(
+      const { data } = await apiClient.post(
         BASE_API.CRAWLER_SLT_EXTRACT(crawler.crawlerCode),
       );
       setSelectors(Array.isArray(data) ? data : []);
@@ -160,12 +259,17 @@ export default function CrawlerDetail({
             : ENUM.popupEnum.alert,
         content: message,
       });
+    } finally {
+      setRecordingSelectors(false);
     }
   };
 
   const extractData = async () => {
+    if (extractingData) return;
+
+    setExtractingData(true);
     try {
-      const { data } = await axios.post(
+      const { data } = await apiClient.post(
         BASE_API.CRAWLER_DATA_EXTRACT(crawler.crawlerCode),
       );
       setOutputs(Array.isArray(data) ? data : []);
@@ -181,7 +285,32 @@ export default function CrawlerDetail({
             ? String(error.response.data)
             : `Unable to extract data: ${error.message}`,
       });
+    } finally {
+      setExtractingData(false);
     }
+  };
+
+  const clearOutputs = () => {
+    if (!outputs.length) return;
+
+    onPopup({
+      type: ENUM.popupEnum.confirm,
+      content: "Clear all outputs for this crawler? This cannot be undone.",
+      onConfirm: async () => {
+        try {
+          await apiClient.delete(BASE_API.CRAWLER_OUTPUTS(crawler.crawlerCode));
+          setOutputs([]);
+          onToast("Crawler outputs cleared.", ENUM.toastEnum.success);
+        } catch (error) {
+          onPopup({
+            type: ENUM.popupEnum.alert,
+            content: `Unable to clear outputs: ${
+              error.response?.data?.message || error.message
+            }`,
+          });
+        }
+      },
+    });
   };
 
   const exportOutputs = () => {
@@ -189,7 +318,7 @@ export default function CrawlerDetail({
       onToast("No data exist to export.", ENUM.toastEnum.error);
       return;
     }
-    const headers = Object.keys(outputs[0]);
+    const headers = outputFields;
     downloadCsv("output.csv", [
       headers,
       ...outputs.map((row) => headers.map((header) => row[header])),
@@ -200,10 +329,15 @@ export default function CrawlerDetail({
     onPopup({
       type: ENUM.popupEnum.confirm,
       content: "Do you want to delete this selector?",
-      onConfirm: () =>
+      onConfirm: () => {
         setSelectors((current) =>
           current.filter((_, selectorIndex) => selectorIndex !== index),
-        ),
+        );
+        setDetailSelectorIndex((current) => {
+          if (current === index) return null;
+          return current !== null && current > index ? current - 1 : current;
+        });
+      },
     });
   };
 
@@ -244,8 +378,8 @@ export default function CrawlerDetail({
 
         <div className="m-dialog-content">
           <div className="main-info flex grey-background" style={{ zIndex: 100 }}>
-            <div className="w-75 flex">
-              <div className="w-80 right-seperate">
+            <div className="crawler-main-layout">
+              <div className="crawler-main-fields">
                 <div className="m-row">
                   <div className="w-40 mr-4">
                     <div className="m-label">Crawler Code (<span className="required">*</span>)</div>
@@ -268,41 +402,23 @@ export default function CrawlerDetail({
                     />
                   </div>
                 </div>
-                <div className="m-row">
-                  <div className="w-75 mr-4">
-                    <div className="m-label">URLs (<span className="required">*</span>)</div>
-                    <div className="crawler-urls">
-                      <table className="m-table">
-                        <tbody className="m-tbody">
-                          {crawler.urls.map((url, index) => (
-                            <tr className="m-tr" key={`${url}-${index}`}>
-                              <td className="m-td bg-white text-align-center">{index + 1}</td>
-                              <td className="m-td bg-white">{url}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                <div className="m-row crawler-schedule-row">
+                  <div className="w-full">
+                    <div className="m-label">Optional Crawl Schedule (Cron)</div>
+                    <BaseInput
+                      value={crawler.cronExpression}
+                      onChange={(value) => updateCrawler("cronExpression", value)}
+                      placeholder="0 9 * * *"
+                    />
+                    <div className="schedule-help">
+                      Five fields: minute hour day-of-month month day-of-week.
+                      Runs in Asia/Ho_Chi_Minh time. Example: <code>0 9 * * *</code>{" "}
+                      runs daily at 09:00. Leave empty to disable scheduling.
                     </div>
-                  </div>
-                  <div className="w-25 flex align-center">
-                    <label className="file-select w-80" title=".CSV, .XLSX or .XLS file">
-                      <div className="select-button">
-                        {selectedFile ? (
-                          <span>File: {selectedFile.name}</span>
-                        ) : (
-                          <span>Choose File</span>
-                        )}
-                      </div>
-                      <input
-                        type="file"
-                        accept=".xlsx,.xls,.csv"
-                        onChange={importFile}
-                      />
-                    </label>
                   </div>
                 </div>
               </div>
-              <div className="w-20">
+              <aside className="crawler-side-panel">
                 <div className="left-seperate">
                   <div className="m-label">Selector Type (<span className="required">*</span>)</div>
                   <div className="ratio-check-detail">
@@ -322,21 +438,97 @@ export default function CrawlerDetail({
                     ))}
                   </div>
                 </div>
-              </div>
-            </div>
-            <div className="w-25 flex align-center flex-end">
-              <button
-                className="m-btn m-btn-primary btn-size-default mr-4"
-                onClick={extractSelectors}
-              >
-                Extract Selectors
-              </button>
-              <button
-                className="m-btn m-btn-primary btn-size-default"
-                onClick={extractData}
-              >
-                Extract Data
-              </button>
+                <div className="crawler-browser-mode">
+                  <div className="m-label">Browser Mode</div>
+                  <div className="ratio-check-detail">
+                    {[["Headless", true], ["Visible", false]].map(([label, value]) => (
+                      <label className="m-radio" key={label}>
+                        <input
+                          className="m-inner-ratio"
+                          type="radio"
+                          name="crawlerHeadlessMode"
+                          checked={crawler.headless === value}
+                          onChange={() => updateCrawler("headless", value)}
+                        />
+                        <span className="m-radio-name">{label}</span>
+                        <span className="m-radio-marked" />
+                      </label>
+                    ))}
+                  </div>
+                  <div className="schedule-help">
+                    Visible mode requires a graphical display on the server.
+                  </div>
+                </div>
+                <section className="crawler-url-panel">
+                  <div className="crawler-url-panel-heading">
+                    <div className="m-label">URLs (<span className="required">*</span>)</div>
+                    <label className="file-select" title=".CSV, .XLSX or .XLS file">
+                      <span className="select-button">
+                        {selectedFile ? selectedFile.name : "Import"}
+                      </span>
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        onChange={importFile}
+                      />
+                    </label>
+                  </div>
+                  <div className="crawler-url-entry">
+                    <textarea
+                      className="m-input crawler-url-textarea"
+                      value={urlInput}
+                      onChange={(event) => setUrlInput(event.target.value)}
+                      placeholder={"Enter one URL per line\nhttps://example.com"}
+                      rows={3}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                          event.preventDefault();
+                          addUrl();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="m-btn btn-size-default m-btn-primary"
+                      onClick={addUrl}
+                    >
+                      Add
+                    </button>
+                  </div>
+                  <div className="crawler-url-help">
+                    One URL per line. Press Ctrl+Enter to add.
+                  </div>
+                  <div className="crawler-urls">
+                    <table className="m-table">
+                      <tbody className="m-tbody">
+                        {crawler.urls.map((url, index) => (
+                          <tr className="m-tr" key={`${url}-${index}`}>
+                            <td className="m-td bg-white text-align-center">{index + 1}</td>
+                            <td className="m-td bg-white">{url}</td>
+                            <td className="m-td bg-white text-align-center">
+                              <button
+                                type="button"
+                                className="crawler-url-remove plain-button"
+                                aria-label={`Remove URL ${url}`}
+                                onClick={() => removeUrl(index)}
+                              >
+                                ×
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {!crawler.urls.length && (
+                          <tr className="m-tr">
+                            <td className="m-td bg-white text-align-center" colSpan={3}>
+                              No URLs added yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </aside>
             </div>
           </div>
 
@@ -356,15 +548,57 @@ export default function CrawlerDetail({
               </button>
             </div>
             <div className="flex-grow" />
-            {activeTab === 1 && (
+            <div className="crawler-tab-actions">
+              {activeTab === 0 && (
+                <button
+                  type="button"
+                  className="m-btn m-btn-primary btn-size-default"
+                  onClick={addSelector}
+                >
+                  Add Selector
+                </button>
+              )}
               <button
-                className="icon-button"
-                title="Export output to CSV file"
-                onClick={exportOutputs}
+                className="m-btn m-btn-primary btn-size-default"
+                disabled={recordingSelectors}
+                onClick={extractSelectors}
               >
-                <span className="m-icon icon--excel" />
+                {recordingSelectors
+                  ? "Recording... Close browser to finish"
+                  : "Extract Selectors"}
               </button>
-            )}
+              <button
+                className="m-btn m-btn-primary btn-size-default"
+                disabled={extractingData}
+                onClick={extractData}
+                aria-live="polite"
+              >
+                {extractingData && (
+                  <span className="crawler-button-spinner" aria-hidden="true" />
+                )}
+                {extractingData ? "Extracting..." : "Extract Data"}
+              </button>
+              {activeTab === 1 && (
+                <>
+                  <button
+                    type="button"
+                    className="m-btn btn-size-default m-btn-secondary"
+                    disabled={!outputs.length}
+                    onClick={clearOutputs}
+                  >
+                    Clear Outputs
+                  </button>
+                  <button
+                    className="icon-button"
+                    title="Export output to CSV file"
+                    disabled={!outputs.length}
+                    onClick={exportOutputs}
+                  >
+                    <span className="m-icon icon--excel" />
+                  </button>
+                </>
+              )}
+            </div>
           </div>
 
           {activeTab === 0 ? (
@@ -375,10 +609,8 @@ export default function CrawlerDetail({
                     <th className="space sticky-col left" />
                     <th className="m-th" style={{ width: 30 }}>#</th>
                     <th className="m-th" style={{ width: 180 }}>Metadata</th>
-                    <th className="m-th" style={{ width: 100 }}>Tag</th>
                     <th className="m-th" style={{ width: 350 }}>CSS</th>
                     <th className="m-th" style={{ width: 350 }}>XPath</th>
-                    <th className="m-th" style={{ width: 100 }}>Event Type</th>
                     <th className="m-th" style={{ width: 30 }} />
                     <th className="space sticky-col right" />
                   </tr>
@@ -387,7 +619,7 @@ export default function CrawlerDetail({
                   {selectors.map((selector, index) => (
                     <tr
                       className="m-tr"
-                      key={selector.id ?? index}
+                      key={selector.clientKey ?? selector.id ?? selector._id ?? index}
                       onClick={() => setDetailSelectorIndex(index)}
                     >
                       <td className="space static-col left" />
@@ -400,7 +632,6 @@ export default function CrawlerDetail({
                           />
                         ) : selector.metadata}
                       </td>
-                      <td className="m-td text-align-center">{selector.tag}</td>
                       <td className="m-td text-overflow-hidden selector-edit-cell" title={selector.selectorCSS}>
                         {detailSelectorIndex === index ? (
                           <BaseInput
@@ -417,7 +648,6 @@ export default function CrawlerDetail({
                           />
                         ) : selector.selectorXPath}
                       </td>
-                      <td className="m-td text-align-center">{selector.eventType}</td>
                       <td className="m-td text-align-center">
                         <button
                           className="selector-delete plain-button"
@@ -444,20 +674,28 @@ export default function CrawlerDetail({
                     <tr className="m-tr">
                       <th className="space sticky-col left" />
                       <th className="m-th" style={{ width: 30 }}>#</th>
-                      {Object.keys(outputs[0]).map((key) => (
+                      <th className="m-th">Status</th>
+                      {outputFields.map((key) => (
                         <th className="m-th" key={key}>{key}</th>
                       ))}
                       <th className="space sticky-col right" />
                     </tr>
                   </thead>
                   <tbody className="m-tbody">
-                    {outputs.map((output, index) => (
+                    {orderedOutputs.map((output, index) => (
                       <tr className="m-tr" key={index}>
                         <td className="space static-col left" />
                         <td className="m-td text-align-center">{index + 1}</td>
-                        {Object.entries(output).map(([key, value]) => (
+                        <td className="m-td crawler-output-status">
+                          {output[crawlerStatusKey] && (
+                            <span className={`crawler-new-badge ${output[crawlerStatusKey] === "READ" ? "is-read" : ""}`}>
+                              {output[crawlerStatusKey]}
+                            </span>
+                          )}
+                        </td>
+                        {outputFields.map((key) => (
                           <td className="m-td text-overflow-hidden" key={key} style={{ maxWidth: 250 }}>
-                            {String(value ?? "")}
+                            {String(output[key] ?? "")}
                           </td>
                         ))}
                         <td className="space static-col right" />
@@ -474,20 +712,22 @@ export default function CrawlerDetail({
         <footer className="m-dialog-footer">
           <div className="left-group-btn">
             <button
-              className="m-btn-footer btn-size-default mg-r-6"
+              type="button"
+              className="m-btn btn-size-default m-btn-secondary"
               onClick={onClose}
             >
-              Cancel
+              Back
             </button>
           </div>
           <div className="flex-grow" />
           <div className="right-group-btn flex">
             <button
-              className="add-btn m-btn m-btn-primary"
+              type="button"
+              className="m-btn btn-size-default m-btn-primary"
               disabled={saving}
               onClick={saveCrawler}
             >
-              {saving ? "Saving..." : "Save Crawler"}
+              {saving ? "Saving..." : "Save"}
             </button>
           </div>
         </footer>

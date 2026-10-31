@@ -26,6 +26,15 @@ services:
     environment:
       PORT: 4000
       MONGODB_URI: mongodb://mongo:27017/crawlers
+      AUTH_JWT_SECRET: "${AUTH_JWT_SECRET:?Set AUTH_JWT_SECRET in the root .env file}"
+      APP_BASE_URL: "${APP_BASE_URL:-http://localhost:8080}"
+      EMAILJS_SERVICE_ID: "${EMAILJS_SERVICE_ID:-service_ywvscwl}"
+      EMAILJS_TEMPLATE_ID: "${EMAILJS_TEMPLATE_ID:-}"
+      EMAILJS_PUBLIC_KEY: "${EMAILJS_PUBLIC_KEY:-}"
+      EMAILJS_PRIVATE_KEY: "${EMAILJS_PRIVATE_KEY:-}"
+      AUTH_COOKIE_SECURE: "${AUTH_COOKIE_SECURE:-false}"
+      AUTH_COOKIE_SAME_SITE: "${AUTH_COOKIE_SAME_SITE:-lax}"
+      CORS_ORIGIN: "${CORS_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080}"
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
       PUPPETEER_HEADLESS: "true"
       PUPPETEER_NO_SANDBOX: "true"

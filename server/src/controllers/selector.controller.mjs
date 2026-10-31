@@ -55,24 +55,20 @@ export const getSelectorsByCode = async (req, res) => {
 
         if (extractedSelectors.length == 0) return res.status(200).json([])
 
-        // cập nhật nhiều selectors (xóa hết r tạo lại)      
+        // Replace the saved selectors only after the recorder returns selections.
         await Selectors.deleteMany({ crawlerCode })
-        
-        // tạo mới nhiều selectors
-        extractedSelectors.map(async (selector) => {
-            selector.crawlerCode = crawlerData.crawlerCode
-            selector.modifiedDate = new Date()
+        const savedSelectors = await Selectors.insertMany(
+            extractedSelectors.map((selector) => ({
+                ...selector,
+                crawlerCode: crawlerData.crawlerCode,
+                modifiedDate: new Date(),
+            })),
+        );
 
-            console.log(selector);
-
-            const newElement = new Selectors(selector)
-            await newElement.save()
-        })
-
-        return res.status(200).json(extractedSelectors)
+        return res.status(200).json(savedSelectors)
     } catch (error) {
         console.error(error);
-        return res.status(400).json(`Lỗi lấy selector của trang: ${error.message}`)
+        return res.status(500).json(`Unable to record selectors: ${error.message}`)
     }
 }
 

@@ -1,7 +1,19 @@
 import { Crawlers, Selectors, Data } from "../model/index.mjs";
-import { scraper } from "../services/scraper.mjs";
-import { generateCrawlerCode, processOutput } from "../utils/tools.mjs";
+import { executeCrawler } from "../services/crawlerRunner.mjs";
+import { syncCrawlerSchedule, validateCronExpression } from "../services/crawlerScheduler.mjs";
+import { generateCrawlerCode } from "../utils/tools.mjs";
+import { getCrawlerStatus } from "../services/dataChanges.mjs";
 
+function hasUsableSelector(crawler, selectors) {
+    const selectorField = crawler.selectorType === "xpath"
+        ? "selectorXPath"
+        : "selectorCSS";
+    return Array.isArray(selectors)
+        && selectors.some((selector) =>
+            typeof selector?.[selectorField] === "string"
+            && selector[selectorField].trim(),
+        );
+}
 
 export const generateNewCrawlerCode = async (req, res) => {
     try {
@@ -48,7 +60,20 @@ export const getAllCrawlers = async (req, res) => {
             }
         })
 
-        return res.status(200).json({Data: crawlersInDB, TotalUrls, TotalDataAmount, AveragePfmTime })
+        const outputByCrawler = new Map(
+            outputsInDB.map((output) => [output.crawlerCode, output.data]),
+        );
+        const crawlersWithStatus = crawlersInDB.map((crawler) => ({
+            ...crawler.toObject(),
+            status: getCrawlerStatus(outputByCrawler.get(crawler.crawlerCode)),
+        }));
+
+        return res.status(200).json({
+            Data: crawlersWithStatus,
+            TotalUrls,
+            TotalDataAmount,
+            AveragePfmTime,
+        })
     } catch (error) {
         console.error(error);
         return res.status(500).json("Lỗi của Server. Xin liên hệ dev để xử lý vấn đề này")
@@ -93,6 +118,7 @@ export const deleteCrawler = async (req, res) => {
         await Crawlers.deleteOne({ crawlerCode })
         await Selectors.deleteMany({ crawlerCode })
         await Data.deleteOne({ crawlerCode })
+        syncCrawlerSchedule(crawlerCode, "")
 
         return res.status(200).json("Đã xóa thành công")
     } catch (error) {
@@ -101,10 +127,43 @@ export const deleteCrawler = async (req, res) => {
     }
 }
 
+export const clearCrawlerOutputs = async (req, res) => {
+    try {
+        const { crawlerCode } = req.params;
+        const crawler = await Crawlers.findOne({ crawlerCode });
+        if (!crawler) {
+            return res.status(404).json("Crawler does not exist.");
+        }
+
+        await Data.deleteOne({ crawlerCode });
+        return res.status(200).json({ message: "Crawler outputs cleared." });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json("Unable to clear crawler outputs.");
+    }
+};
+
 // Tạo mới 2 dữ liệu crawler và element
 export const addCrawler = async (req, res) => {
     try {
-        let { crawler, selectors } = req.body
+        let { crawler, selectors = [] } = req.body
+
+        if (!crawler || typeof crawler !== "object") {
+            return res.status(400).json("Crawler details are required.")
+        }
+
+        let cronExpression
+        try {
+            cronExpression = validateCronExpression(crawler.cronExpression)
+        } catch (error) {
+            return res.status(400).json(error.message)
+        }
+
+        if (cronExpression && !hasUsableSelector(crawler, selectors)) {
+            return res.status(400).json(
+                "Add at least one valid selector before enabling a crawl schedule.",
+            )
+        }
 
         // validate dữ liệu 
         const crawlerData = await Crawlers.findOne({ crawlerCode: crawler.crawlerCode })
@@ -113,18 +172,18 @@ export const addCrawler = async (req, res) => {
         else {
             // đủ thì tạo mới dữ liệu
             crawler.modifiedDate = new Date()
+            crawler.cronExpression = cronExpression
 
             const newCrawler = new Crawlers(crawler)
             await newCrawler.save()
 
             // tạo mới nhiều selectors
-            selectors.map(async (selector) => {
-                selector.crawlerCode = crawler.crawlerCode
-                selector.modifiedDate = new Date()
-
-                const newSelector = new Selectors(selector)
-                await newSelector.save()
-            })
+            await Promise.all(selectors.map((selector) => new Selectors({
+                ...selector,
+                crawlerCode: crawler.crawlerCode,
+                modifiedDate: new Date(),
+            }).save()))
+            syncCrawlerSchedule(crawler.crawlerCode, cronExpression)
         }
         return res.status(201).json("Tạo mới Crawler thành công")
     } catch (error) {
@@ -150,35 +209,56 @@ export const updateCrawler = async (req, res) => {
             return res.status(404).json('Không tồn tại crawler')
         }
 
+        let cronExpression
+        try {
+            cronExpression = validateCronExpression(
+                crawler.cronExpression ?? crawlerData.cronExpression,
+            )
+        } catch (error) {
+            return res.status(400).json(error.message)
+        }
+
+        const selectorsToSave = Array.isArray(selectors)
+            ? selectors
+            : await Selectors.find({ crawlerCode })
+        const crawlerToSave = { ...crawler, cronExpression }
+
+        if (cronExpression && !hasUsableSelector(crawlerToSave, selectorsToSave)) {
+            return res.status(400).json(
+                "Add at least one valid selector before enabling a crawl schedule.",
+            )
+        }
+
         // kiểm tra mã crawler cập nhật có tồn tại 
-        if (crawler.crawlerCode && crawlerCode != crawlerData.crawlerCode){
-            crawlerData = await Crawlers.findOne({ crawlerCode: crawler.crawlerCode })
+        if (crawlerToSave.crawlerCode && crawlerCode != crawlerData.crawlerCode){
+            crawlerData = await Crawlers.findOne({ crawlerCode: crawlerToSave.crawlerCode })
             if (crawlerData){
                 return res.status(404).json('Mã crawler cập nhật đã tồn tại')
             }
         }
             
-        crawler.modifiedDate = new Date()
+        crawlerToSave.modifiedDate = new Date()
         
         // cập nhật dựa trên tên của crawler
-        crawlerData = await Crawlers.updateOne({
+        await Crawlers.updateOne({
             crawlerCode,
-        }, crawler)
+        }, crawlerToSave)
         
         // cập nhật nhiều selectors (xóa hết r tạo lại)      
-        await Selectors.deleteMany({ crawlerCode: crawler.crawlerCode })
+        if (Array.isArray(selectors)) {
+            await Selectors.deleteMany({ crawlerCode: crawlerCode })
 
-        // tạo mới nhiều selectors
-        selectors.map(async (selector) => {
-            selector.crawlerCode = crawlerCode
-            selector.modifiedDate = new Date()
-
-            const newElement = new Selectors(selector)
-            await newElement.save()
-        })
+            // tạo mới nhiều selectors
+            await Promise.all(selectors.map((selector) => new Selectors({
+                ...selector,
+                crawlerCode,
+                modifiedDate: new Date(),
+            }).save()))
+        }
+        syncCrawlerSchedule(crawlerCode, cronExpression)
 
         // log ra crawler đã được cập nhật
-        console.log("Cập nhật crawler thành công... \n", crawlerData);
+        console.log("Cập nhật crawler thành công...");
 
         return res.status(200).json("Cập nhật thành công!")
     } catch (error) {
@@ -204,48 +284,10 @@ export const runCrawler = async (req, res) => {
             return res.status(400).json('Không tìm thấy mã crawler đầu vào')
         }
 
-        // kiểm tra crawler tồn tại
-        let crawlerData = await Crawlers.findOne({ crawlerCode })
-        if (!crawlerData) {
-            return res.status(404).json('Crawler must be saved before crawling data')
-        }
-
-        // lấy dữ liệu selector của crawler
-        let selectorsData = await Selectors.find({ crawlerCode })
-
-        // không đủ dữ liệu
-        if (selectorsData.length <= 0) {
-            return res.status(404).json('Selectors must be extracted before crawling data')
-        }
-
-        let output = await scraper.run(crawlerData.selectorType, crawlerData.urls, selectorsData)
-        
-        let result = processOutput(output.data);
-        console.log('Processing Output...\n', result.length > 0 ? result[1] : result);
-        
-        // update hiệu năng crawler
-        crawlerData.performance = output.performance;
-        await Crawlers.findOneAndUpdate({crawlerCode}, crawlerData);
-
-        // save dữ liệu
-        let obj = {
-            crawlerCode,
-            data: result,
-            modifiedDate: new Date()
-        }
-
-        let dataInDB = await Data.findOne({crawlerCode})
-        if (dataInDB){
-            await Data.updateOne({crawlerCode}, obj)
-        }      
-        else{
-            let newData = new Data(obj);
-            await newData.save()
-        }
-
+        const result = await executeCrawler(crawlerCode)
         return res.status(200).json(result)
     } catch (error) {
         console.error(error);
-        return res.status(400).json(`Có vấn đề với request: ${error.message}`)
+        return res.status(error.statusCode || 500).json(`Unable to run crawler: ${error.message}`)
     }
 }

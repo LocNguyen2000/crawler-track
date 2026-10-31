@@ -10,27 +10,19 @@ const minimal_args = [
  * Crawl dữ liệu bằng selector được cho
  */
 export const scraper = {
-    browser: null,
-    async initBrowser() {
-        try {
-            // puppeteer.use(StealthPlugin())
-
-            const browser = await puppeteer.launch({
-                headless: process.env.PUPPETEER_HEADLESS === 'true',
-                executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-                args: [
-                    ...minimal_args,
-                    ...(process.env.PUPPETEER_NO_SANDBOX === 'true' ? ['--no-sandbox'] : []),
-                ],
-                defaultViewport: {
-                    width: 1920,
-                    height: 1080
-                }
-            })
-            return browser;
-        } catch (error) {
-            console.log('Error when open browser');
-        }
+    async initBrowser(headless = process.env.PUPPETEER_HEADLESS === 'true') {
+        return puppeteer.launch({
+            headless,
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+            args: [
+                ...minimal_args,
+                ...(process.env.PUPPETEER_NO_SANDBOX === 'true' ? ['--no-sandbox'] : []),
+            ],
+            defaultViewport: {
+                width: 1920,
+                height: 1080
+            }
+        })
     },
     async autoScroll(page){
         await page.evaluate(async () => {
@@ -51,17 +43,18 @@ export const scraper = {
         });
     },
 
-    async run(type, urls, selectors) {
+    async run(type, urls, selectors, headless) {
         let startTimer = performance.now()
+        let browser;
         try {
             let resultData = []
 
             /**
              * Khởi tạo browser bằng puppeteer
              */
-            this.browser = await this.initBrowser()
+            browser = await this.initBrowser(headless)
 
-            const page = await this.browser.newPage();
+            const page = await browser.newPage();
 
             await page.setViewport({
                 width: 1920,
@@ -81,7 +74,7 @@ export const scraper = {
 
                         await page.goto(url, { waitUntil: "networkidle2", timeout: 0});
 
-                        selectors.map(async (slt) => {
+                        await Promise.all(selectors.map(async (slt) => {
 
                             await page.waitForFunction(
                                 (xpath) => document.evaluate(
@@ -120,7 +113,7 @@ export const scraper = {
                             let meta = slt.metadata === '' ? `field_${slt.index}` : slt.metadata
                             resultObject[meta] = (text != null ? text : '')
 
-                        })
+                        }))
                         resultData.push(resultObject);
 
                         let scrapeEndTimer = performance.now()
@@ -140,11 +133,11 @@ export const scraper = {
 
                         await page.goto(url, { waitUntil: "networkidle2", timeout: 0  });
 
-                        selectors.map(async (slt) => {
+                        await Promise.all(selectors.map(async (slt) => {
 
                             await page.waitForSelector(slt.selectorCSS).catch((err) => {
                                 console.log('Fail to find slt');
-                            }) 
+                            })
 
                             let text = await page.evaluate(sltObj => {
                                 let dom = document.querySelectorAll(sltObj.selectorCSS)
@@ -175,7 +168,7 @@ export const scraper = {
                             let meta = slt.metadata === '' ? `field_${slt.index}` : slt.metadata
 
                             resultObject[meta] = (text != null ? text : '')
-                        })
+                        }))
                         resultData.push(resultObject);
 
                         let scrapeEndTimer = performance.now()
@@ -192,13 +185,16 @@ export const scraper = {
             let pfm = ((endTimer - startTimer) / 1000).toPrecision(4)
             console.log('Crawl data done in %d second.', pfm);
 
-            await this.browser.close()
-
             return { data: resultData, performance: pfm }
         } catch (error) {
-            console.log(error.message)
-            await this.browser.close()
+            console.error(error);
             throw error
+        } finally {
+            if (browser?.connected) {
+                await browser.close().catch((error) => {
+                    console.error('Unable to close crawler browser:', error);
+                });
+            }
         }
     }
 }

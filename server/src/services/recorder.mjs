@@ -7,44 +7,40 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth'
  */
 export const recorder = {
     browser: null,
-     async initBrowser(){
-        try {
-            const browser = await puppeteer.launch({
-                headless: process.env.PUPPETEER_HEADLESS === 'true',
-                executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-                args: [
-                    '--window-size=1920,1080',
-                    ...(process.env.PUPPETEER_NO_SANDBOX === 'true' ? ['--no-sandbox'] : []),
-                ],
-                defaultViewport: {
-                    width: 1920,
-                    height: 1080
-                }
-            })
-            return browser;
-        } catch (error) {
-            console.log('Error when open browser');
-        }
+    async initBrowser() {
+        return puppeteer.launch({
+            headless: false,
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+            args: [
+                '--start-maximized',
+                ...(process.env.PUPPETEER_NO_SANDBOX === 'true' ? ['--no-sandbox'] : []),
+            ],
+            defaultViewport: null
+        });
     },
     async run(url) {
+        if (this.browser?.connected) {
+            throw new Error('Selector recording is already in progress.');
+        }
+
         let startTimer = performance.now();
-    
-        let elementData = []
+        const elementData = [];
+        let browser;
+
         try {
             /**
              * Khởi tạo browser bằng puppeteer
              */
              puppeteer.use(StealthPlugin())
 
-            this.browser = await this.initBrowser();
+            browser = await this.initBrowser();
+            this.browser = browser;
+            const browserClosed = new Promise((resolve) => {
+                browser.once('disconnected', resolve);
+            });
 
-            const page = await this.browser.newPage();
+            const page = await browser.newPage();
 
-            await page.setViewport({
-                width: 1920,
-                height: 1080
-            })
-            
             let pageOpenTimer = performance.now();
             let pagePfm = ((pageOpenTimer - startTimer)/ 1000).toExponential(4)
             console.log('Browser & page open after %d second...', pagePfm);
@@ -141,12 +137,13 @@ export const recorder = {
                  * Trả về thẻ tag, tên class, id của đối tượng
                  */
                 function generateSelector(event, index) {
+                    const target = event.target;
                     let element = {
                         index,
                         metadata: "",
-                        tag: event.path[0].localName,
-                        selectorXPath: getXPathTo(event.target),
-                        selectorCSS: getCssTo(event.target),
+                        tag: target.localName,
+                        selectorXPath: getXPathTo(target),
+                        selectorCSS: getCssTo(target),
                         eventType: event.type,
                     }
                     return element
@@ -162,7 +159,7 @@ export const recorder = {
                         event.target.style.outline = "2px dashed #019160";
                         event.target.title = event.target.nodeName;
                     }
-                    else if (event.type == "mouseout") {
+                    else if (event.type == "mouseout" && !event.target.dataset.crawlerSelected) {
                         event.target.style.outline = "none";
                         event.target.removeAttribute('title');
                     }
@@ -189,13 +186,11 @@ export const recorder = {
                      * Lưu lại selector của element
                      */
                     let elementCounter = 0
-                    document.body.addEventListener("click", (event) => {
-                        console.log('Extracting Element');
-    
+                    document.body.addEventListener("click", async (event) => {
                         let result = generateSelector(event, ++elementCounter);
-                        console.log(result);
-                        window.saveEvent(result);
-                        alert('Selector extracted')
+                        await window.saveEvent(result);
+                        event.target.dataset.crawlerSelected = "true";
+                        event.target.style.outline = "2px solid #2ca01c";
                     });
                     /**
                      *  Sự kiện chuột Hover
@@ -206,29 +201,28 @@ export const recorder = {
     
             });
             console.log('Go to %d ...', url);
-            await page.goto(url)
-            await page.waitForNavigation()
-                .then(async () => {
-                    await this.browser.close()
-                })
-                .catch((error) => {
-                    console.log('Navigation done...')
-                })
+            await page.goto(url);
+            await browserClosed;
         } catch (error) {
-            await this.browser.close()
-
-            console.log(error.message)
-            throw error
-        }
-        finally {
+            if (!browser || browser.connected) {
+                throw error;
+            }
+        } finally {
             let endTimer = performance.now();
-    
-            let pfm = ((endTimer - startTimer)/ 1000).toExponential(4)
-            console.log("Record selector done in %d second!", pfm )
-    
-            console.log(elementData);
-    
-            return elementData
+            let pfm = ((endTimer - startTimer) / 1000).toExponential(4);
+            console.log("Record selector done in %d second!", pfm);
+            if (browser?.connected) {
+                try {
+                    await browser.close();
+                } catch (error) {
+                    console.error('Unable to close selector recorder browser:', error);
+                }
+            }
+            if (this.browser === browser) {
+                this.browser = null;
+            }
         }
+
+        return elementData;
     }
-} 
+}

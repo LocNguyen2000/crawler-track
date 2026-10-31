@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
+import { AuthProvider } from "./js/AuthContext.jsx";
 import "./css/main.css";
 import "./css/common.css";
 import "./css/width.css";
@@ -24,11 +25,14 @@ import "./css/layout/navbar.css";
 import "./css/layout/sidebar.css";
 import "./css/react-app.css";
 import "./css/crawler-detail.css";
+import "./css/auth.css";
 
 createRoot(document.getElementById("app")).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </AuthProvider>
   </React.StrictMode>,
 );

@@ -12,6 +12,8 @@
     "dev:server": "npm --prefix server run dev",
     "build": "npm --prefix ui run build",
     "test:server": "npm --prefix server test",
+    "db:migrate": "node migrate-mongo.mjs",
+    "auth:invite": "node server/src/scripts/createInvite.mjs",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down"
   }
