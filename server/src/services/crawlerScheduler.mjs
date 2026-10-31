@@ -13,6 +13,9 @@ export function validateCronExpression(expression) {
 
     const normalized = expression.trim();
     if (!normalized) return "";
+    if (process.env.VERCEL) {
+        throw new Error("Scheduled crawls are unavailable on Vercel serverless deployments.");
+    }
     if (normalized.split(/\s+/).length !== 5 || !cron.validate(normalized)) {
         throw new Error("Enter a valid five-field cron expression.");
     }

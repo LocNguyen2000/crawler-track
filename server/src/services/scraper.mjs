@@ -1,4 +1,5 @@
 import puppeteer from 'puppeteer'
+import chromium from '@sparticuz/chromium'
 // import puppeteer from 'puppeteer-extra'
 // import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 
@@ -11,6 +12,17 @@ const minimal_args = [
  */
 export const scraper = {
     async initBrowser(headless = process.env.PUPPETEER_HEADLESS === 'true') {
+        if (process.env.VERCEL) {
+            return puppeteer.launch({
+                args: chromium.args,
+                executablePath: await chromium.executablePath(),
+                headless: true,
+                defaultViewport: {
+                    width: 1920,
+                    height: 1080
+                }
+            })
+        }
         return puppeteer.launch({
             headless,
             executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,

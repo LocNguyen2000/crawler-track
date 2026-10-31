@@ -34,6 +34,11 @@ export const getSelectorsByCode = async (req, res) => {
  * @param req: Chứa url cần để chạy method  
  */
  export const getPageSelectors = async (req, res) => {
+    if (process.env.VERCEL) {
+        return res.status(501).json({
+            message: "Interactive selector recording requires a visible browser and is unavailable on Vercel. Enter selectors manually instead.",
+        })
+    }
     try {
         // 1. Lấy page Url
         const { crawlerCode } = req.params

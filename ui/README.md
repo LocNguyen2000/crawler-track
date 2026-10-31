@@ -55,6 +55,48 @@ variables in the repository-root `.env` file. Use HTTPS with
 `AUTH_COOKIE_SECURE=true`; for a cross-site UI/API deployment, also set
 `AUTH_COOKIE_SAME_SITE=none`.
 
+## Deploy the backend to Vercel
+
+Create a separate Vercel project for the backend and set its **Root Directory**
+to `server`. Vercel detects the Express app exported from `src/index.mjs`; the
+function duration is configured in `server/vercel.json`. Deploy the `server`
+directory from the repository root with:
+
+```sh
+npx vercel --cwd server
+npx vercel --cwd server --prod
+```
+
+Set these project environment variables in Vercel (Production, Preview, and
+Development as needed):
+
+- `MONGODB_URI`: a MongoDB connection string reachable from Vercel.
+- `AUTH_JWT_SECRET`: a private random secret of at least 32 bytes.
+- `APP_BASE_URL`: the deployed frontend origin, without a trailing path.
+- `CORS_ORIGIN`: the exact frontend origin, for example
+  `https://your-ui.vercel.app`.
+- `EMAILJS_SERVICE_ID`, `EMAILJS_TEMPLATE_ID`, `EMAILJS_PUBLIC_KEY`, and
+  `EMAILJS_PRIVATE_KEY`.
+- `AUTH_COOKIE_SECURE=true`.
+- `PUPPETEER_SKIP_DOWNLOAD=true` to avoid downloading a local Chrome during
+  Vercel builds. The Vercel crawler uses the bundled serverless Chromium.
+- `PUPPETEER_HEADLESS=true`.
+
+The UI must be deployed separately (set its Vercel Root Directory to `ui`) with
+`VITE_API_BASE_URL` set to the backend deployment origin, such as
+`https://your-api.vercel.app`. Rebuild the UI after changing this variable.
+Configure `CORS_ORIGIN` and `APP_BASE_URL` to the final UI deployment origin.
+If the UI and API are on different sites, also set
+`AUTH_COOKIE_SAME_SITE=none`; this requires HTTPS and secure cookies.
+
+Vercel Functions are stateless between invocations: the in-process cron
+scheduler is disabled there, and scheduled crawls are rejected. Interactive
+selector recording is also unavailable because it requires a visible browser;
+enter CSS/XPath selectors manually. Headless crawling is supported, but each
+request is subject to Vercel's function duration and package-size limits. Long
+crawls or continuous schedules should run on an always-on worker rather than a
+Vercel Function.
+
 ## Schedule crawls
 
 In the crawler dialog, enter a five-field cron expression to enable scheduled
