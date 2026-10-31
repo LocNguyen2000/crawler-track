@@ -1,0 +1,30 @@
+.m-header-txt{
+    font-size: 18px;
+    align-items: center;
+}
+.m-crawler-form .m-btn-wrapper{
+    display: flex;
+    padding: 0 10px;
+}
+
+.m-crawler-form .m-form-grid{
+    width: calc(100% - 20px);
+    padding: 10px;
+    background-color: #fff;
+}
+
+
+
+.m-crawler-form .m-form-grid .m-input-wrapper {
+    margin-right: 15px;
+}
+
+.m-crawler-form .m-form-footer{
+    display: flex;
+    justify-content:  flex-end;
+    background-color: #bebebe;
+    padding-top: 5px;
+    padding-bottom: 5px;
+}
+
+

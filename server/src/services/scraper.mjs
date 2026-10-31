@@ -16,8 +16,12 @@ export const scraper = {
             // puppeteer.use(StealthPlugin())
 
             const browser = await puppeteer.launch({
-                headless: false,
-                args: minimal_args,
+                headless: process.env.PUPPETEER_HEADLESS === 'true',
+                executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+                args: [
+                    ...minimal_args,
+                    ...(process.env.PUPPETEER_NO_SANDBOX === 'true' ? ['--no-sandbox'] : []),
+                ],
                 defaultViewport: {
                     width: 1920,
                     height: 1080
@@ -79,7 +83,17 @@ export const scraper = {
 
                         selectors.map(async (slt) => {
 
-                            await page.waitForXPath(slt.selectorXPath).catch((err) => {
+                            await page.waitForFunction(
+                                (xpath) => document.evaluate(
+                                    xpath,
+                                    document,
+                                    null,
+                                    XPathResult.FIRST_ORDERED_NODE_TYPE,
+                                    null
+                                ).singleNodeValue !== null,
+                                { timeout: 30000 },
+                                slt.selectorXPath
+                            ).catch((err) => {
                                 console.log('Fail to find slt');
                             })
 
@@ -188,4 +202,3 @@ export const scraper = {
         }
     }
 }
-

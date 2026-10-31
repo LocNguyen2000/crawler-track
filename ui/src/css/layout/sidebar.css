@@ -1,0 +1,72 @@
+.m-sidebar{
+    width: 160px;
+    background-color: #393a3d;
+}
+.m-sidebar a{
+    text-decoration: none;
+}
+
+.m-sidebar .m-logo-container{
+    display: flex;
+    width: 100%;
+    height: 48px;
+    align-items: center;
+    justify-content: center;
+}
+
+.m-sidebar .m-logo-container .menu-container{
+    width: 24px;
+    height: 24px;
+    border-radius: 3px;
+    margin-right: 10px;
+    cursor: pointer;
+}
+
+.m-sidebar .m-logo-container .logo-text{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 32px;
+    width: 80px;
+    color: #ffffff;
+    text-align: center;
+    font-style: italic;
+    font-weight: 600;
+    font-size: larger;
+    letter-spacing: 2px;
+}
+
+.m-sidebar .m-menu-item-list{
+    display: flex;
+    flex-direction: column;
+    padding-top: 10px;
+    height: calc(100% - 76px);
+}
+
+.m-sidebar .m-menu-item-list .m-menu-item{
+    display: flex;
+    height: 45px;
+    padding-left: 10px;
+    padding-right: 10px;
+    cursor: pointer;
+    align-items: center;
+}
+
+.m-sidebar .m-menu-item-list .m-menu-item.active{
+    background-color: rgb(44, 160, 28);
+}
+
+.m-menu-item-list .m-menu-item .m-icon{
+    margin-right: 8px;
+} 
+
+.m-menu-item-list .m-menu-item .item-title{
+   font-size: 13px;
+} 
+/*
+ Các loại icon 
+*/
+
+.m-menu-item-list .m-menu-item .item-title{
+    color: #ffffff;
+} 

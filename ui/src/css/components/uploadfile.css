@@ -1,0 +1,17 @@
+.file-select > .select-button {
+  padding: 0.5rem;
+  color: white;
+  background-color: #2ca01c;
+  border-radius: .3rem;
+  text-align: center;
+  font-weight: bold;
+}
+
+.file-select > .select-button:hover{
+    cursor: pointer;
+    background-color: #35bf22;
+}
+
+.file-select > input[type="file"] {
+  display: none;
+}

@@ -1,0 +1,109 @@
+.m-navbar{
+    display: flex;
+    position: absolute;
+    top: 0;
+    height: 48px;
+    width: 100%;
+    align-items: center;
+    background-color: #fff;
+}
+.m-navbar .m-icon.icon--spider{
+    width: 30px;
+    height: 30px;
+    margin-left: 15px;
+}
+
+.m-navbar .branch-name-wrapper{
+    display: flex;
+    align-items: center;
+    padding-left: 24px;
+}
+.branch-name-wrapper .branch-name{
+    font-size: 14px;
+    font-weight: 600;
+    color: #111;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.m-space{
+    flex: 1;
+}
+
+.m-navbar .current-db-header{
+    display: flex;
+    height: 30px;
+    cursor: pointer;
+    border-radius: 40px;
+    align-items: center;
+    padding: 0 12px;
+    margin-left: 15px;
+    margin-right: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border: 1px solid #ebedf0;
+}
+.current-db-header .current-db-icon{
+    width: 8px;
+    height: 8px;
+    background-color: #4ea344;
+    border-radius: 50%;
+}
+.current-db-header .current-db-name{
+    padding-left: 7px;
+    font-size: 13px;
+}
+
+/* 
+.m-navbar .navbar-icon-download{
+    margin-right: 15px;
+    padding-right: 10px;
+}
+
+
+.navbar-icon-download .m-icon.icon--download{
+    margin: 0 10px;
+}
+
+.m-navbar .m-input-wrapper{
+    margin-right: 20px;
+}
+ */
+
+.m-navbar .navbar-icon{
+    padding: 0 10px;
+    position: relative;
+    height: 100%;
+    display: flex;
+    align-items: center;
+}
+.m-navbar .navbar-icon:hover{
+    background-color: #000;
+    cursor: pointer;
+}
+
+
+.m-navbar .navbar-icon:hover::after {
+    content: "";
+    width: 0;
+    height: 0;
+    border-bottom: 8px solid transparent;
+    border-left: 22px solid transparent;
+    border-right: 22px solid transparent;
+    border-top: 8px solid #000;
+    position: absolute;
+    bottom: -16px;
+    left: 0;
+    z-index: 1;
+}
+
+.m-navbar .m-dropdown-user{
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    margin-right: 20px;
+}
+.m-navbar .m-dropdown-user > *{
+    margin-left: 10px;
+}

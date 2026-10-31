@@ -10,8 +10,12 @@ export const recorder = {
      async initBrowser(){
         try {
             const browser = await puppeteer.launch({
-                headless: false,
-                args: ['--window-size=1920,1080'],
+                headless: process.env.PUPPETEER_HEADLESS === 'true',
+                executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+                args: [
+                    '--window-size=1920,1080',
+                    ...(process.env.PUPPETEER_NO_SANDBOX === 'true' ? ['--no-sandbox'] : []),
+                ],
                 defaultViewport: {
                     width: 1920,
                     height: 1080

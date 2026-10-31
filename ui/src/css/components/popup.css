@@ -1,0 +1,69 @@
+/**
+* Mô tả : Pop up cảnh báo
+* >> Popup Hủy
+*/
+.m-popup.m-dialog{
+    min-width: 450px;
+    width: 450px;
+}
+
+.m-popup .m-dialog-header{
+    width: 100%;
+}
+
+.m-popup .m-dialog-body .m-dialog-avatar{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 40px;
+    height: 40px;
+    margin-right: 10px;
+    background-color: #F4F4F4;
+    border-radius: 50%;
+}
+
+.m-popup .m-dialog-body .m-dialog-text{
+   width: calc(100% - 98px);
+   box-sizing: border-box;
+   margin-right: 48px;
+   font-weight: 200;
+   font-size: 14px;
+}
+
+.m-popup span{
+    font-weight: bold;
+}
+
+#warnPopup .m-popup .m-dialog-body .m-dialog-avatar > *{
+    color: #F1C04E;
+}
+
+/*
+* >> Popup Xóa 
+*/
+
+#dltPopup .m-popup .m-dialog-avatar > *{
+    color: #EB5757;
+}
+#dltPopup .m-popup .m-dialog-footer #dltBtn{
+    background-color: #EB5757;
+}
+#dltPopup .m-popup .m-dialog-footer #dltBtn:hover{
+    background-color: #F65454;
+}
+
+/*
+* >> Popup thông báo
+*/
+
+#notiPopup .m-popup .m-dialog-avatar{
+    display: none;
+}
+
+#notiPopup .m-popup .m-dialog-text{
+    width: 100%;
+}
+
+#notiPopup .m-dialog-footer .m-btn-cancel{
+    display: none;
+}

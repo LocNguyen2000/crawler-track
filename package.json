@@ -1,0 +1,18 @@
+{
+  "name": "spiderman-crawler",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Spider-Man Crawler application",
+  "engines": {
+    "node": ">=24.14.0 <25"
+  },
+  "scripts": {
+    "dev": "npm --prefix ui run dev",
+    "dev:ui": "npm --prefix ui run dev",
+    "dev:server": "npm --prefix server run dev",
+    "build": "npm --prefix ui run build",
+    "test:server": "npm --prefix server test",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down"
+  }
+}
