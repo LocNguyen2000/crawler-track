@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getCrawlerStatus, markNewRows } from "./dataChanges.mjs";
+import { getCrawlerStatus, getNewRows, markNewRows } from "./dataChanges.mjs";
 
 test("marks newly discovered rows and puts them before existing rows", () => {
     const rows = markNewRows(
@@ -47,4 +47,15 @@ test("reports NEW when the latest crawl contains new rows and READ otherwise", (
     assert.equal(getCrawlerStatus([{ __crawlerStatus: "NEW" }]), "NEW");
     assert.equal(getCrawlerStatus([{ name: "Existing" }]), "READ");
     assert.equal(getCrawlerStatus([]), "READ");
+});
+
+test("returns only NEW rows for scheduled notifications", () => {
+    assert.deepEqual(
+        getNewRows([
+            { name: "New", __crawlerStatus: "NEW" },
+            { name: "Existing", __crawlerStatus: "READ" },
+        ]),
+        [{ name: "New", __crawlerStatus: "NEW" }],
+    );
+    assert.deepEqual(getNewRows(null), []);
 });

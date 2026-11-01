@@ -42,3 +42,9 @@ export function getCrawlerStatus(rows) {
         ? "NEW"
         : "READ";
 }
+
+export function getNewRows(rows) {
+    return Array.isArray(rows)
+        ? rows.filter((row) => row?.[statusKey] === "NEW")
+        : [];
+}

@@ -20,6 +20,7 @@ const dataSchema = new mongoose.Schema({
 const crawlerSchema = new mongoose.Schema({
     crawlerCode: { type: String, required: true, unique: true},
     crawlerName: { type: String, required: true },
+    ownerUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User", select: false },
     selectorType: { type: String },
     urls: { type: Array },
     description: {type: String },

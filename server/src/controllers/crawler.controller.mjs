@@ -174,7 +174,10 @@ export const addCrawler = async (req, res) => {
             crawler.modifiedDate = new Date()
             crawler.cronExpression = cronExpression
 
-            const newCrawler = new Crawlers(crawler)
+            const newCrawler = new Crawlers({
+                ...crawler,
+                ownerUserId: req.user._id,
+            })
             await newCrawler.save()
 
             // tạo mới nhiều selectors
@@ -204,7 +207,7 @@ export const updateCrawler = async (req, res) => {
         }
 
         // kiểm tra crawler tồn tại
-        let crawlerData = await Crawlers.findOne({ crawlerCode })
+        let crawlerData = await Crawlers.findOne({ crawlerCode }).select("+ownerUserId")
         if (!crawlerData) {
             return res.status(404).json('Không tồn tại crawler')
         }
@@ -221,7 +224,11 @@ export const updateCrawler = async (req, res) => {
         const selectorsToSave = Array.isArray(selectors)
             ? selectors
             : await Selectors.find({ crawlerCode })
-        const crawlerToSave = { ...crawler, cronExpression }
+        const crawlerToSave = {
+            ...crawler,
+            cronExpression,
+            ownerUserId: crawlerData.ownerUserId || req.user._id,
+        }
 
         if (cronExpression && !hasUsableSelector(crawlerToSave, selectorsToSave)) {
             return res.status(400).json(

@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sendVerificationEmail } from "./authMail.mjs";
+import {
+    sendNewDataNotificationEmail,
+    sendVerificationEmail,
+} from "./authMail.mjs";
 
 const emailJsVariables = [
     "EMAILJS_SERVICE_ID",
     "EMAILJS_TEMPLATE_ID",
+    "EMAILJS_NOTIFICATION_TEMPLATE_ID",
     "EMAILJS_PUBLIC_KEY",
     "EMAILJS_PRIVATE_KEY",
     "APP_BASE_URL",
@@ -75,6 +79,45 @@ test("verification email reports provider failures", async () => {
             sendVerificationEmail("person@example.com", "verification-token"),
             /EmailJS returned HTTP 429: Rate limit/,
         );
+    } finally {
+        globalThis.fetch = originalFetch;
+        restoreEnvironment(originalEnvironment);
+    }
+});
+
+test("new-data email sends escaped crawler rows to the notification template", async () => {
+    const originalEnvironment = preserveEnvironment();
+    const originalFetch = globalThis.fetch;
+    Object.assign(process.env, {
+        EMAILJS_SERVICE_ID: "service_test",
+        EMAILJS_NOTIFICATION_TEMPLATE_ID: "template_notifications",
+        EMAILJS_PUBLIC_KEY: "public_test",
+        EMAILJS_PRIVATE_KEY: "private_test",
+    });
+
+    let request;
+    globalThis.fetch = async (url, options) => {
+        request = { url, options };
+        return { ok: true };
+    };
+
+    try {
+        await sendNewDataNotificationEmail("owner@example.com", {
+            crawlerName: "Example crawler",
+            crawlerCode: "CRWL-1",
+            newRows: [
+                { title: "<script>alert(1)</script>", __crawlerStatus: "NEW" },
+            ],
+        });
+
+        const payload = JSON.parse(request.options.body);
+        assert.equal(payload.template_id, "template_notifications");
+        assert.equal(payload.template_params.to_email, "owner@example.com");
+        assert.equal(payload.template_params.crawler_name, "Example crawler");
+        assert.equal(payload.template_params.crawler_code, "CRWL-1");
+        assert.equal(payload.template_params.new_data_count, 1);
+        assert.match(payload.template_params.new_data_json, /&lt;script&gt;/);
+        assert.doesNotMatch(payload.template_params.new_data_json, /<script>/);
     } finally {
         globalThis.fetch = originalFetch;
         restoreEnvironment(originalEnvironment);

@@ -1,6 +1,9 @@
 import cron from "node-cron";
 import { Crawlers } from "../model/index.mjs";
+import { Users } from "../model/auth.mjs";
+import { sendNewDataNotificationEmail } from "./authMail.mjs";
 import { executeCrawler } from "./crawlerRunner.mjs";
+import { getNewRows } from "./dataChanges.mjs";
 
 const scheduledTasks = new Map();
 const scheduleTimezone = "Asia/Ho_Chi_Minh";
@@ -38,7 +41,11 @@ export function syncCrawlerSchedule(crawlerCode, expression) {
                     { crawlerCode },
                     { $set: { lastScheduledRunAt: new Date() } },
                 );
-                await executeCrawler(crawlerCode);
+                const result = await executeCrawler(crawlerCode);
+                const newRows = getNewRows(result);
+                if (newRows.length > 0) {
+                    await sendNewDataNotification(crawlerCode, newRows);
+                }
                 console.info(`Scheduled crawl completed for ${crawlerCode}`);
             } catch (error) {
                 console.error(`Scheduled crawl failed for ${crawlerCode}:`, error);
@@ -48,6 +55,44 @@ export function syncCrawlerSchedule(crawlerCode, expression) {
     );
 
     scheduledTasks.set(crawlerCode, task);
+}
+
+async function sendNewDataNotification(crawlerCode, newRows) {
+    try {
+        const crawler = await Crawlers.findOne({ crawlerCode })
+            .select("crawlerName +ownerUserId");
+        if (!crawler?.ownerUserId) {
+            console.warn(
+                `New data found for ${crawlerCode}, but no crawler owner is set; edit the crawler to enable email notifications.`,
+            );
+            return;
+        }
+
+        const owner = await Users.findOne({
+            _id: crawler.ownerUserId,
+            emailVerified: true,
+        }).select("email");
+        if (!owner?.email) {
+            console.warn(
+                `New data found for ${crawlerCode}, but its verified owner account was not found.`,
+            );
+            return;
+        }
+
+        await sendNewDataNotificationEmail(owner.email, {
+            crawlerName: crawler.crawlerName,
+            crawlerCode,
+            newRows,
+        });
+        console.info(
+            `Sent new-data notification for ${crawlerCode} to its owner.`,
+        );
+    } catch (error) {
+        console.error(
+            `Unable to send new-data notification for ${crawlerCode}:`,
+            error,
+        );
+    }
 }
 
 export async function restoreCrawlerSchedules() {

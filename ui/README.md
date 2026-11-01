@@ -31,9 +31,14 @@ are invite-only. From the repository root, configure `EMAILJS_TEMPLATE_ID`,
 least 32 bytes, and set `APP_BASE_URL` to the UI origin. The EmailJS service ID
 is preconfigured as `service_ywvscwl`.
 
-Create an EmailJS email template with `to_email` as the recipient address and
-the variables `app_name` and `verification_url` in the message body. A ready-
-to-copy HTML template is in `server/email-templates/verification.html`. Then
+Create an EmailJS verification template with `to_email` as the recipient
+address and the variables `app_name` and `verification_url` in the message
+body. A ready-to-copy HTML template is in
+`server/email-templates/verification.html`. For scheduled-run notifications,
+create a separate EmailJS template and set `EMAILJS_NOTIFICATION_TEMPLATE_ID`.
+It receives `to_email`, `crawler_name`, `crawler_code`, `new_data_count`,
+`new_data_json`, and `app_name`; a template is in
+`server/email-templates/new-data-notification.html`. Then
 create a one-time invitation:
 
 ```sh
@@ -47,8 +52,10 @@ Do not commit the generated secret or the EmailJS private key.
 The command prints a signup link valid for 72 hours. After signup, the user
 must verify the email within 24 hours before signing in. The browser keeps
 short-lived access tokens in memory and uses a rotating, HTTP-only refresh
-cookie. All verified accounts currently share the existing crawler workspace;
-authentication does not assign crawler records to individual accounts.
+cookie. All verified accounts currently share the existing crawler workspace.
+New crawlers are associated with their creator's account for email alerts. An
+existing crawler without an owner is associated with the signed-in user the
+first time it is edited.
 
 When running with Docker Compose, set the same authentication and EmailJS
 variables in the repository-root `.env` file. Use HTTPS with
@@ -75,7 +82,8 @@ Development as needed):
 - `APP_BASE_URL`: the deployed frontend origin, without a trailing path.
 - `CORS_ORIGIN`: the exact frontend origin, for example
   `https://your-ui.vercel.app`.
-- `EMAILJS_SERVICE_ID`, `EMAILJS_TEMPLATE_ID`, `EMAILJS_PUBLIC_KEY`, and
+- `EMAILJS_SERVICE_ID`, `EMAILJS_TEMPLATE_ID`,
+  `EMAILJS_NOTIFICATION_TEMPLATE_ID`, `EMAILJS_PUBLIC_KEY`, and
   `EMAILJS_PRIVATE_KEY`.
 - `AUTH_COOKIE_SECURE=true`.
 - `PUPPETEER_SKIP_DOWNLOAD=true` to avoid downloading a local Chrome during
@@ -103,7 +111,8 @@ In the crawler dialog, enter a five-field cron expression to enable scheduled
 crawls, for example `0 9 * * *` to run every day at 09:00 in the server's local
 time. Leave the field empty to disable scheduling. A scheduled crawler must
 have at least one selector matching its selector type. Schedules are saved with
-the crawler and restored when the server starts.
+the crawler and restored when the server starts. After a scheduled run discovers
+new rows, the server emails the crawler creator's verified account address.
 
 ## Run the full application with Docker
 
