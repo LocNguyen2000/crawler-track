@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { timingSafeEqual } from "node:crypto";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -10,6 +11,7 @@ import { requireAuth } from "./middleware/requireAuth.mjs";
 import { getCorsOrigins } from "./config/corsOrigins.mjs";
 import { connectDatabase } from "./services/database.mjs";
 import { assertAuthConfiguration } from "./services/authSecurity.mjs";
+import { runDueCrawlerSchedules } from "./services/crawlerScheduler.mjs";
 
 assertAuthConfiguration();
 assertAuthCookieConfiguration();
@@ -35,6 +37,30 @@ app.use(async (_req, _res, next) => {
 
 app.get("/health", (_req, res) => {
     res.status(200).json({ status: "ok" });
+});
+
+app.get("/cron/crawlers", async (req, res, next) => {
+    const secret = process.env.CRON_SECRET;
+    if (!secret) {
+        console.error("CRON_SECRET is required to run Vercel scheduled crawls.");
+        return res.status(503).json({ message: "Scheduled crawl service is not configured." });
+    }
+
+    const expectedAuthorization = Buffer.from(`Bearer ${secret}`);
+    const authorization = Buffer.from(req.get("authorization") || "");
+    if (
+        authorization.length !== expectedAuthorization.length
+        || !timingSafeEqual(authorization, expectedAuthorization)
+    ) {
+        return res.status(401).json({ message: "Unauthorized." });
+    }
+
+    try {
+        const result = await runDueCrawlerSchedules();
+        return res.status(200).json(result);
+    } catch (error) {
+        return next(error);
+    }
 });
 
 app.use("/auth", authRouter);

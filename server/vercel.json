@@ -4,5 +4,11 @@
     "src/index.mjs": {
       "maxDuration": 300
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/cron/crawlers",
+      "schedule": "* * * * *"
+    }
+  ]
 }

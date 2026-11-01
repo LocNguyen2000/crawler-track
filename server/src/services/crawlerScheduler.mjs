@@ -16,13 +16,15 @@ export function validateCronExpression(expression) {
 
     const normalized = expression.trim();
     if (!normalized) return "";
-    if (process.env.VERCEL) {
-        throw new Error("Scheduled crawls are unavailable on Vercel serverless deployments.");
-    }
     if (normalized.split(/\s+/).length !== 5 || !cron.validate(normalized)) {
         throw new Error("Enter a valid five-field cron expression.");
     }
     return normalized;
+}
+
+export function matchesScheduleAt(expression, date) {
+    const task = cron.createTask(expression, () => {}, { timezone: scheduleTimezone });
+    return task.match(date);
 }
 
 export function syncCrawlerSchedule(crawlerCode, expression) {
@@ -30,7 +32,7 @@ export function syncCrawlerSchedule(crawlerCode, expression) {
     scheduledTasks.delete(crawlerCode);
 
     const normalized = validateCronExpression(expression);
-    if (!normalized) return;
+    if (!normalized || process.env.VERCEL) return;
 
     const task = cron.schedule(
         normalized,
@@ -55,6 +57,64 @@ export function syncCrawlerSchedule(crawlerCode, expression) {
     );
 
     scheduledTasks.set(crawlerCode, task);
+}
+
+export async function runDueCrawlerSchedules(now = new Date()) {
+    const scheduledMinute = new Date(now);
+    scheduledMinute.setUTCSeconds(0, 0);
+
+    const crawlers = await Crawlers.find({
+        cronExpression: { $type: "string", $ne: "" },
+    }).sort({ crawlerCode: 1 });
+    const result = { checked: crawlers.length, started: 0, failed: 0 };
+
+    for (const crawler of crawlers) {
+        let isDue;
+        try {
+            isDue = matchesScheduleAt(crawler.cronExpression, scheduledMinute);
+        } catch (error) {
+            result.failed++;
+            console.error(
+                `Unable to evaluate schedule for ${crawler.crawlerCode}:`,
+                error,
+            );
+            continue;
+        }
+        if (!isDue) continue;
+
+        const claimedCrawler = await Crawlers.findOneAndUpdate(
+            {
+                _id: crawler._id,
+                cronExpression: crawler.cronExpression,
+                $or: [
+                    { lastScheduledRunAt: { $lt: scheduledMinute } },
+                    { lastScheduledRunAt: { $exists: false } },
+                    { lastScheduledRunAt: null },
+                ],
+            },
+            { $set: { lastScheduledRunAt: scheduledMinute } },
+            { new: true },
+        );
+        if (!claimedCrawler) continue;
+
+        result.started++;
+        try {
+            const rows = await executeCrawler(crawler.crawlerCode);
+            const newRows = getNewRows(rows);
+            if (newRows.length > 0) {
+                await sendNewDataNotification(crawler.crawlerCode, newRows);
+            }
+            console.info(`Scheduled crawl completed for ${crawler.crawlerCode}`);
+        } catch (error) {
+            result.failed++;
+            console.error(
+                `Scheduled crawl failed for ${crawler.crawlerCode}:`,
+                error,
+            );
+        }
+    }
+
+    return result;
 }
 
 async function sendNewDataNotification(crawlerCode, newRows) {

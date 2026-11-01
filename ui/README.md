@@ -76,6 +76,9 @@ Development as needed):
 
 - `MONGODB_URI`: a MongoDB connection string reachable from Vercel.
 - `AUTH_JWT_SECRET`: a private random secret of at least 32 bytes.
+- `CRON_SECRET`: a random secret of at least 16 characters for securing
+  scheduled-crawler requests. Configure the same value in the Vercel project's
+  Production environment; Vercel sends it as a bearer token automatically.
 - `APP_BASE_URL`: the deployed frontend origin, without a trailing path.
 - `CORS_ORIGIN`: the exact frontend origin, for example
   `https://your-ui.vercel.app`.
@@ -87,6 +90,9 @@ Development as needed):
   Vercel builds. The Vercel crawler uses the bundled serverless Chromium.
 - `PUPPETEER_HEADLESS=true`.
 
+Generate `CRON_SECRET` with
+`node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`.
+
 The UI must be deployed separately (set its Vercel Root Directory to `ui`) with
 `VITE_API_BASE_URL` set to the backend deployment origin, such as
 `https://your-api.vercel.app`. Rebuild the UI after changing this variable.
@@ -94,22 +100,31 @@ Configure `CORS_ORIGIN` and `APP_BASE_URL` to the final UI deployment origin.
 If the UI and API are on different sites, also set
 `AUTH_COOKIE_SAME_SITE=none`; this requires HTTPS and secure cookies.
 
-Vercel Functions are stateless between invocations: the in-process cron
-scheduler is disabled there, and scheduled crawls are rejected. Interactive
-selector recording is also unavailable because it requires a visible browser;
-enter CSS/XPath selectors manually. Headless crawling is supported, but each
-request is subject to Vercel's function duration and package-size limits. Long
-crawls or continuous schedules should run on an always-on worker rather than a
-Vercel Function.
+Vercel Functions are stateless between invocations, so the in-process scheduler
+is used only outside Vercel. In production, a Vercel Cron Job invokes
+`/cron/crawlers` every minute; the endpoint checks saved schedules in MongoDB
+and starts due crawlers. Set `CRON_SECRET` in the Vercel project's Production
+environment to protect that endpoint. Vercel Cron Jobs run only on production
+deployments. The every-minute dispatcher requires a Vercel plan that supports
+minute-level schedules (Pro or Enterprise); Hobby permits only daily cron jobs,
+so it cannot reliably dispatch arbitrary crawler schedules.
+
+Interactive selector recording is unavailable on Vercel because it requires a
+visible browser; enter CSS/XPath selectors manually. Headless crawling is
+supported, but each request is subject to Vercel's function duration and
+package-size limits. Long crawls or continuous schedules should run on an
+always-on worker rather than a Vercel Function.
 
 ## Schedule crawls
 
 In the crawler dialog, enter a five-field cron expression to enable scheduled
-crawls, for example `0 9 * * *` to run every day at 09:00 in the server's local
-time. Leave the field empty to disable scheduling. A scheduled crawler must
-have at least one selector matching its selector type. Schedules are saved with
-the crawler and restored when the server starts. After a scheduled run discovers
-new rows, the server emails the crawler creator's verified account address.
+crawls, for example `0 9 * * *` to run every day at 09:00 in
+`Asia/Ho_Chi_Minh`. Leave the field empty to disable scheduling. A scheduled
+crawler must have at least one selector matching its selector type. Schedules
+are saved with the crawler. On Vercel, the central cron dispatcher checks them
+once per minute; elsewhere, schedules are restored by the always-on server.
+After a scheduled run discovers new rows, the server emails the crawler
+creator's account address.
 
 ## Run the full application with Docker
 
