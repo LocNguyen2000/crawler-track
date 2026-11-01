@@ -102,12 +102,12 @@ If the UI and API are on different sites, also set
 
 Vercel Functions are stateless between invocations, so the in-process scheduler
 is used only outside Vercel. In production, a Vercel Cron Job invokes
-`/cron/crawlers` every minute; the endpoint checks saved schedules in MongoDB
-and starts due crawlers. Set `CRON_SECRET` in the Vercel project's Production
-environment to protect that endpoint. Vercel Cron Jobs run only on production
-deployments. The every-minute dispatcher requires a Vercel plan that supports
-minute-level schedules (Pro or Enterprise); Hobby permits only daily cron jobs,
-so it cannot reliably dispatch arbitrary crawler schedules.
+`/cron/crawlers` once daily at 00:00 UTC (07:00 in Vietnam). The endpoint starts
+all crawlers with a non-empty saved schedule together, regardless of each
+crawler's individual cron time. Set `CRON_SECRET` in the Vercel project's
+Production environment to protect that endpoint. Vercel Cron Jobs run only on
+production deployments. Hobby supports daily schedules, but execution can be
+delayed by up to 59 minutes; Pro or Enterprise provides per-minute precision.
 
 Interactive selector recording is unavailable on Vercel because it requires a
 visible browser; enter CSS/XPath selectors manually. Headless crawling is
@@ -117,14 +117,16 @@ always-on worker rather than a Vercel Function.
 
 ## Schedule crawls
 
-In the crawler dialog, enter a five-field cron expression to enable scheduled
-crawls, for example `0 9 * * *` to run every day at 09:00 in
-`Asia/Ho_Chi_Minh`. Leave the field empty to disable scheduling. A scheduled
+In the crawler dialog, enter a valid five-field cron expression to enable
+scheduled crawls; leave the field empty to disable scheduling. A scheduled
 crawler must have at least one selector matching its selector type. Schedules
-are saved with the crawler. On Vercel, the central cron dispatcher checks them
-once per minute; elsewhere, schedules are restored by the always-on server.
-After a scheduled run discovers new rows, the server emails the crawler
-creator's account address.
+are saved with the crawler. On Vercel, all enabled crawlers run together once
+daily at 07:00 Vietnam time; their individual cron times are ignored.
+Elsewhere, the always-on server runs each crawler according to its individual
+cron expression. After a scheduled run discovers new rows, the server emails
+the crawler creator's account address. Vercel runs all enabled crawlers
+concurrently in one function invocation, so long-running batches may exceed the
+function duration limit.
 
 ## Run the full application with Docker
 

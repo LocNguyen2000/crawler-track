@@ -28,6 +28,7 @@ const crawlerSchema = new mongoose.Schema({
     performance: {type: String},
     cronExpression: { type: String, trim: true, default: "" },
     lastScheduledRunAt: { type: Date },
+    lastVercelScheduledDay: { type: Date },
     headless: { type: Boolean, default: process.env.PUPPETEER_HEADLESS === "true" }
 })
 crawlerSchema.index({ ownerUserId: 1 })

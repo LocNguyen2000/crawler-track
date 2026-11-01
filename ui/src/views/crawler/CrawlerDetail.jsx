@@ -415,6 +415,13 @@ export default function CrawlerDetail({
                       Runs in Asia/Ho_Chi_Minh time. Example: <code>0 9 * * *</code>{" "}
                       runs daily at 09:00. Leave empty to disable scheduling.
                     </div>
+                    {import.meta.env.PROD && (
+                      <div className="schedule-production-warning" role="note">
+                        Production scheduling is not customizable yet. All
+                        crawlers with a schedule run together daily at 07:00
+                        Vietnam time; individual cron times are ignored.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

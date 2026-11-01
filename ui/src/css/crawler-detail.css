@@ -130,6 +130,21 @@
   color: #333;
 }
 
+.schedule-production-warning {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid #e6c46a;
+  border-radius: 4px;
+  background: #fff8df;
+  color: #684f0b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dashboard-schedule-warning {
+  margin: 0 16px 12px;
+}
+
 #crawlerDetail .right-seperate {
   padding-right: 16px;
 }

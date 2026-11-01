@@ -27,6 +27,14 @@ export function matchesScheduleAt(expression, date) {
     return task.match(date);
 }
 
+export function getVercelScheduledDay(now) {
+    return new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+    ));
+}
+
 export function syncCrawlerSchedule(crawlerCode, expression) {
     scheduledTasks.get(crawlerCode)?.stop();
     scheduledTasks.delete(crawlerCode);
@@ -59,45 +67,57 @@ export function syncCrawlerSchedule(crawlerCode, expression) {
     scheduledTasks.set(crawlerCode, task);
 }
 
-export async function runDueCrawlerSchedules(now = new Date()) {
-    const scheduledMinute = new Date(now);
-    scheduledMinute.setUTCSeconds(0, 0);
-
+export async function runDailyCrawlerBatch(now = new Date()) {
+    const scheduledDay = getVercelScheduledDay(now);
     const crawlers = await Crawlers.find({
         cronExpression: { $type: "string", $ne: "" },
     }).sort({ crawlerCode: 1 });
     const result = { checked: crawlers.length, started: 0, failed: 0 };
+    const claimedCrawlers = [];
 
     for (const crawler of crawlers) {
-        let isDue;
         try {
-            isDue = matchesScheduleAt(crawler.cronExpression, scheduledMinute);
+            validateCronExpression(crawler.cronExpression);
         } catch (error) {
             result.failed++;
             console.error(
-                `Unable to evaluate schedule for ${crawler.crawlerCode}:`,
+                `Unable to validate schedule for ${crawler.crawlerCode}:`,
                 error,
             );
             continue;
         }
-        if (!isDue) continue;
 
-        const claimedCrawler = await Crawlers.findOneAndUpdate(
-            {
-                _id: crawler._id,
-                cronExpression: crawler.cronExpression,
-                $or: [
-                    { lastScheduledRunAt: { $lt: scheduledMinute } },
-                    { lastScheduledRunAt: { $exists: false } },
-                    { lastScheduledRunAt: null },
-                ],
-            },
-            { $set: { lastScheduledRunAt: scheduledMinute } },
-            { new: true },
-        );
-        if (!claimedCrawler) continue;
+        try {
+            const claimedCrawler = await Crawlers.findOneAndUpdate(
+                {
+                    _id: crawler._id,
+                    cronExpression: crawler.cronExpression,
+                    $or: [
+                        { lastVercelScheduledDay: { $lt: scheduledDay } },
+                        { lastVercelScheduledDay: { $exists: false } },
+                        { lastVercelScheduledDay: null },
+                    ],
+                },
+                {
+                    $set: {
+                        lastVercelScheduledDay: scheduledDay,
+                        lastScheduledRunAt: now,
+                    },
+                },
+                { new: true },
+            );
+            if (claimedCrawler) claimedCrawlers.push(claimedCrawler);
+        } catch (error) {
+            result.failed++;
+            console.error(
+                `Unable to claim scheduled crawl for ${crawler.crawlerCode}:`,
+                error,
+            );
+        }
+    }
 
-        result.started++;
+    result.started = claimedCrawlers.length;
+    await Promise.all(claimedCrawlers.map(async (crawler) => {
         try {
             const rows = await executeCrawler(crawler.crawlerCode);
             const newRows = getNewRows(rows);
@@ -112,7 +132,7 @@ export async function runDueCrawlerSchedules(now = new Date()) {
                 error,
             );
         }
-    }
+    }));
 
     return result;
 }

@@ -175,6 +175,13 @@ export default function CrawlerDashboard() {
         onSearch={setQuery}
         onReload={loadTable}
       />
+      {import.meta.env.PROD && (
+        <div className="schedule-production-warning dashboard-schedule-warning" role="note">
+          Production scheduling is not customizable yet. All crawlers with a
+          schedule run together daily at 07:00 Vietnam time; individual cron
+          times are ignored.
+        </div>
+      )}
       {loadError && (
         <div className="ui-error" role="alert">
           {loadError}

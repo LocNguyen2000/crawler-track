@@ -11,7 +11,7 @@ import { requireAuth } from "./middleware/requireAuth.mjs";
 import { getCorsOrigins } from "./config/corsOrigins.mjs";
 import { connectDatabase } from "./services/database.mjs";
 import { assertAuthConfiguration } from "./services/authSecurity.mjs";
-import { runDueCrawlerSchedules } from "./services/crawlerScheduler.mjs";
+import { runDailyCrawlerBatch } from "./services/crawlerScheduler.mjs";
 
 assertAuthConfiguration();
 assertAuthCookieConfiguration();
@@ -56,7 +56,7 @@ app.get("/cron/crawlers", async (req, res, next) => {
     }
 
     try {
-        const result = await runDueCrawlerSchedules();
+        const result = await runDailyCrawlerBatch();
         return res.status(200).json(result);
     } catch (error) {
         return next(error);
