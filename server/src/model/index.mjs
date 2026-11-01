@@ -30,6 +30,7 @@ const crawlerSchema = new mongoose.Schema({
     lastScheduledRunAt: { type: Date },
     headless: { type: Boolean, default: process.env.PUPPETEER_HEADLESS === "true" }
 })
+crawlerSchema.index({ ownerUserId: 1 })
 
 export const Crawlers = mongoose.model('crawler', crawlerSchema)
 export const Selectors = mongoose.model('selector', selectorSchema)

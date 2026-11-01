@@ -7,6 +7,10 @@ const BASE_API = {
     AUTH_RESEND_VERIFICATION: `${API_BASE_URL}/auth/resend-verification`,
     AUTH_REFRESH: `${API_BASE_URL}/auth/refresh`,
     AUTH_LOGOUT: `${API_BASE_URL}/auth/logout`,
+    AUTH_PENDING_USERS: `${API_BASE_URL}/auth/admin/pending-users`,
+    AUTH_USER_APPROVAL(userId) {
+        return `${API_BASE_URL}/auth/admin/users/${userId}/approval`
+    },
     CRAWLER: `${API_BASE_URL}/crawler/`,
     CRAWLER_OVERVIEW: `${API_BASE_URL}/crawler/healthcheck`,
     CRAWLER_NEW_CODE: `${API_BASE_URL}/crawler/newCrawlerCode`,

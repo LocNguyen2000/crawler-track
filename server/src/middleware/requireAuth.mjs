@@ -15,10 +15,17 @@ export async function requireAuth(req, res, next) {
         return res.status(401).json({ message: "Your session has expired. Please sign in again." });
     }
 
-    const user = await Users.findById(payload.sub).select("_id email emailVerified");
-    if (!user || !user.emailVerified) {
+    const user = await Users.findById(payload.sub).select("_id email approvalStatus role");
+    if (!user || user.approvalStatus !== "approved") {
         return res.status(401).json({ message: "Authentication required." });
     }
     req.user = user;
+    return next();
+}
+
+export function requireAdmin(req, res, next) {
+    if (req.user?.role !== "admin") {
+        return res.status(403).json({ message: "Administrator access required." });
+    }
     return next();
 }

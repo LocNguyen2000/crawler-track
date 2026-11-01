@@ -1,6 +1,6 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
-import { Invitations, RefreshTokens, Users } from "../model/auth.mjs";
+import { RefreshTokens, Users } from "../model/auth.mjs";
 import { getCorsOrigins } from "../config/corsOrigins.mjs";
 import {
     createAccessToken,
@@ -14,6 +14,7 @@ import {
     assertEmailJsConfiguration,
     sendVerificationEmail,
 } from "../services/authMail.mjs";
+import { requireAdmin, requireAuth } from "../middleware/requireAuth.mjs";
 
 const router = Router();
 const authLimiter = rateLimit({
@@ -75,7 +76,7 @@ async function createSession(user, res) {
     setRefreshCookie(res, rawRefreshToken);
     return {
         accessToken: await createAccessToken(user),
-        user: { id: user._id.toString(), email: user.email },
+        user: { id: user._id.toString(), email: user.email, role: user.role },
     };
 }
 
@@ -97,59 +98,27 @@ function validPassword(password) {
 router.post("/signup", async (req, res, next) => {
     const email = normalizeEmail(req.body?.email);
     const password = req.body?.password;
-    const inviteToken = req.body?.inviteToken;
     if (!validEmail(email)) {
         return res.status(400).json({ message: "Enter a valid email address." });
     }
     if (!validPassword(password)) {
         return res.status(400).json({ message: "Password must be 12 to 1024 bytes." });
     }
-    if (typeof inviteToken !== "string" || inviteToken.length < 32) {
-        return res.status(400).json({ message: "A valid invitation link is required." });
-    }
-    try {
-        assertEmailJsConfiguration();
-    } catch (error) {
-        console.error("Email verification is not configured:", error.message);
-        return res.status(503).json({ message: "Email verification is not configured on the server." });
-    }
 
     try {
         if (await Users.exists({ email })) {
             return res.status(409).json({ message: "An account with that email already exists." });
         }
-        const now = new Date();
-        const invitation = await Invitations.findOneAndUpdate(
-            {
-                email,
-                tokenHash: hashToken(inviteToken),
-                expiresAt: { $gt: now },
-                usedAt: null,
-            },
-            { $set: { usedAt: now } },
-            { new: true },
-        );
-        if (!invitation) {
-            return res.status(400).json({ message: "This invitation is invalid, expired, or already used." });
-        }
-
-        const verificationToken = createOpaqueToken();
-        const user = await Users.create({
+        await Users.create({
             email,
             passwordHash: await hashPassword(password),
-            emailVerified: false,
-            verificationTokenHash: hashToken(verificationToken),
-            verificationExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            emailVerified: true,
+            approvalStatus: "pending",
+            role: "user",
         });
-        try {
-            await sendVerificationEmail(user.email, verificationToken);
-        } catch (error) {
-            console.error("Unable to send account verification email:", error);
-            return res.status(503).json({
-                message: "Your account was created, but verification email delivery failed. Use resend verification after mail service is available.",
-            });
-        }
-        return res.status(201).json({ message: "Account created. Check your email to verify it before signing in." });
+        return res.status(201).json({
+            message: "Account created. An administrator must approve your account before you can sign in.",
+        });
     } catch (error) {
         if (error.code === 11000) {
             return res.status(409).json({ message: "An account with that email already exists." });
@@ -226,8 +195,11 @@ router.post("/login", async (req, res, next) => {
         if (!matches) {
             return res.status(401).json({ message: "Email or password is incorrect." });
         }
-        if (!user.emailVerified) {
-            return res.status(403).json({ message: "Verify your email before signing in." });
+        if (user.approvalStatus === "pending") {
+            return res.status(403).json({ message: "Your account is awaiting administrator approval." });
+        }
+        if (user.approvalStatus !== "approved") {
+            return res.status(403).json({ message: "Your account registration was not approved." });
         }
         const session = await createSession(user, res);
         return res.status(200).json(session);
@@ -250,13 +222,45 @@ router.post("/refresh", async (req, res, next) => {
             clearRefreshCookie(res);
             return res.status(401).json({ message: "Your session has expired. Please sign in again." });
         }
-        const user = await Users.findById(refreshToken.userId).select("_id email emailVerified");
-        if (!user || !user.emailVerified) {
+        const user = await Users.findById(refreshToken.userId).select("_id email approvalStatus role");
+        if (!user || user.approvalStatus !== "approved") {
             clearRefreshCookie(res);
             return res.status(401).json({ message: "Authentication required." });
         }
         const session = await createSession(user, res);
         return res.status(200).json(session);
+    } catch (error) {
+        return next(error);
+    }
+});
+
+router.get("/admin/pending-users", requireAuth, requireAdmin, async (_req, res, next) => {
+    try {
+        const users = await Users.find({ approvalStatus: "pending" })
+            .select("_id email createdAt")
+            .sort({ createdAt: 1 });
+        return res.status(200).json({ users });
+    } catch (error) {
+        return next(error);
+    }
+});
+
+router.post("/admin/users/:userId/approval", requireAuth, requireAdmin, async (req, res, next) => {
+    const { userId } = req.params;
+    const { status } = req.body || {};
+    if (!/^[\da-f]{24}$/i.test(userId) || !["approved", "rejected"].includes(status)) {
+        return res.status(400).json({ message: "A valid user and approval decision are required." });
+    }
+    try {
+        const user = await Users.findOneAndUpdate(
+            { _id: userId, approvalStatus: "pending" },
+            { $set: { approvalStatus: status } },
+            { new: true, runValidators: true },
+        ).select("_id email approvalStatus");
+        if (!user) {
+            return res.status(404).json({ message: "This pending account was not found." });
+        }
+        return res.status(200).json({ user });
     } catch (error) {
         return next(error);
     }

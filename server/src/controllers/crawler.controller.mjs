@@ -36,11 +36,12 @@ export const getAllCrawlers = async (req, res) => {
         let TotalUrls = 0, TotalDataAmount = 0, totalPfmTime = 0, AveragePfmTime;
         let counter = 0;
         
-        const crawlersInDB = await Crawlers.find()
+        const crawlersInDB = await Crawlers.find({ ownerUserId: req.user._id })
         
         if (crawlersInDB.length < 0) return res.status(200).json([])
         
-        const outputsInDB = await Data.find()
+        const crawlerCodes = crawlersInDB.map(({ crawlerCode }) => crawlerCode)
+        const outputsInDB = await Data.find({ crawlerCode: { $in: crawlerCodes } })
 
         crawlersInDB.map(crawler => {
             if (crawler.urls){
@@ -83,11 +84,14 @@ export const getCrawlerByCode = async (req, res) => {
     try {
         const { crawlerCode } = req.params;
 
-        const crawlerData = await Crawlers.findOne({ crawlerCode })
+        const crawlerData = await Crawlers.findOne({
+            crawlerCode,
+            ownerUserId: req.user._id,
+        })
+        if (!crawlerData) return res.status(404).json("Không tồn tại Crawler")
+
         const selectorsData = await Selectors.find({ crawlerCode })
         const outputsData = await Data.findOne({ crawlerCode })
-
-        if (!crawlerData) return res.status(404).json("Không tồn tại Crawler")
 
         let result = {
             crawler: crawlerData,
@@ -109,13 +113,16 @@ export const deleteCrawler = async (req, res) => {
             return res.status(404).json('Trường thông tin gửi không được để trống')
         }
 
-        const crawlerData = await Crawlers.findOne({ crawlerCode })
+        const crawlerData = await Crawlers.findOne({
+            crawlerCode,
+            ownerUserId: req.user._id,
+        })
 
         if (!crawlerData) {
             return res.status(404).json('Crawler không tồn tại')
         }
 
-        await Crawlers.deleteOne({ crawlerCode })
+        await Crawlers.deleteOne({ crawlerCode, ownerUserId: req.user._id })
         await Selectors.deleteMany({ crawlerCode })
         await Data.deleteOne({ crawlerCode })
         syncCrawlerSchedule(crawlerCode, "")
@@ -130,7 +137,10 @@ export const deleteCrawler = async (req, res) => {
 export const clearCrawlerOutputs = async (req, res) => {
     try {
         const { crawlerCode } = req.params;
-        const crawler = await Crawlers.findOne({ crawlerCode });
+        const crawler = await Crawlers.findOne({
+            crawlerCode,
+            ownerUserId: req.user._id,
+        });
         if (!crawler) {
             return res.status(404).json("Crawler does not exist.");
         }
@@ -207,7 +217,10 @@ export const updateCrawler = async (req, res) => {
         }
 
         // kiểm tra crawler tồn tại
-        let crawlerData = await Crawlers.findOne({ crawlerCode }).select("+ownerUserId")
+        let crawlerData = await Crawlers.findOne({
+            crawlerCode,
+            ownerUserId: req.user._id,
+        }).select("+ownerUserId")
         if (!crawlerData) {
             return res.status(404).json('Không tồn tại crawler')
         }
@@ -224,11 +237,9 @@ export const updateCrawler = async (req, res) => {
         const selectorsToSave = Array.isArray(selectors)
             ? selectors
             : await Selectors.find({ crawlerCode })
-        const crawlerToSave = {
-            ...crawler,
-            cronExpression,
-            ownerUserId: crawlerData.ownerUserId || req.user._id,
-        }
+        const crawlerToSave = { ...crawler }
+        delete crawlerToSave.ownerUserId
+        crawlerToSave.cronExpression = cronExpression
 
         if (cronExpression && !hasUsableSelector(crawlerToSave, selectorsToSave)) {
             return res.status(400).json(
@@ -249,6 +260,7 @@ export const updateCrawler = async (req, res) => {
         // cập nhật dựa trên tên của crawler
         await Crawlers.updateOne({
             crawlerCode,
+            ownerUserId: req.user._id,
         }, crawlerToSave)
         
         // cập nhật nhiều selectors (xóa hết r tạo lại)      
@@ -289,6 +301,14 @@ export const runCrawler = async (req, res) => {
         // validate dữ liệu
         if (!crawlerCode) {
             return res.status(400).json('Không tìm thấy mã crawler đầu vào')
+        }
+
+        const crawler = await Crawlers.exists({
+            crawlerCode,
+            ownerUserId: req.user._id,
+        })
+        if (!crawler) {
+            return res.status(404).json("Crawler does not exist.")
         }
 
         const result = await executeCrawler(crawlerCode)

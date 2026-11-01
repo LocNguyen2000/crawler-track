@@ -6,8 +6,10 @@ import { useAuth } from "./js/AuthContext.jsx";
 import CrawlerDashboard from "./views/crawler/CrawlerDashboard.jsx";
 import UrlGenerator from "./views/url/UrlGenerator.jsx";
 import { LoginPage, SignupPage, VerifyEmailPage } from "./views/auth/AuthPages.jsx";
+import AdminApprovalsPage from "./views/auth/AdminApprovalsPage.jsx";
 
 function Sidebar() {
+  const { user } = useAuth();
   return (
     <aside className="m-sidebar">
       <div className="m-logo-container">
@@ -23,6 +25,12 @@ function Sidebar() {
           <div className="m-icon icon--tools" />
           <div className="item-title">Tools</div>
         </NavLink>
+        {user?.role === "admin" && (
+          <NavLink className="m-menu-item" to="/admin/approvals" title="Account approvals">
+            <div className="m-icon icon--overview" />
+            <div className="item-title">Approvals</div>
+          </NavLink>
+        )}
       </nav>
     </aside>
   );
@@ -85,6 +93,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/CA" replace />} />
           <Route path="/CA" element={<CrawlerDashboard />} />
           <Route path="/URL" element={<UrlGenerator />} />
+          <Route path="/admin/approvals" element={<AdminApprovalsPage />} />
           <Route path="*" element={<Navigate to="/CA" replace />} />
         </Route>
       </Routes>

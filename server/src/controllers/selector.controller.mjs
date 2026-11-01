@@ -10,7 +10,10 @@ export const getSelectorsByCode = async (req, res) => {
             return res.status(404).json('Trường thông tin gửi không được để trống')
         }
 
-        const crawlerData = await Crawlers.findOne({ crawlerCode })
+        const crawlerData = await Crawlers.findOne({
+            crawlerCode,
+            ownerUserId: req.user._id,
+        })
 
         if (!crawlerData) {
             return res.status(404).json('Crawler không tồn tại')
@@ -47,7 +50,10 @@ export const getSelectorsByCode = async (req, res) => {
             return res.status(404).json('Trường thông tin còn thiếu')
         }
 
-        let crawlerData = await Crawlers.findOne({ crawlerCode })
+        let crawlerData = await Crawlers.findOne({
+            crawlerCode,
+            ownerUserId: req.user._id,
+        })
         if (!crawlerData) {
             return res.status(404).json('Không tồn tại crawler')
         }
@@ -87,7 +93,10 @@ export const updateElements = async (req, res) => {
             return res.status(404).json('Trường thông tin gửi không được để trống')
         }
 
-        const crawlerData = await Crawlers.findOne({ crawlerCode })
+        const crawlerData = await Crawlers.findOne({
+            crawlerCode,
+            ownerUserId: req.user._id,
+        })
 
         if (!crawlerData) {
             return res.status(404).json('Crawler không tồn tại')

@@ -4,6 +4,16 @@ const userSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true, select: false },
     emailVerified: { type: Boolean, default: false },
+    approvalStatus: {
+        type: String,
+        enum: ["pending", "approved", "rejected"],
+        default: "approved",
+    },
+    role: {
+        type: String,
+        enum: ["admin", "user"],
+        default: "admin",
+    },
     verificationTokenHash: { type: String, select: false },
     verificationExpiresAt: { type: Date, select: false },
 }, { timestamps: true });

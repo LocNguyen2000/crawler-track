@@ -60,17 +60,6 @@ export function LoginPage() {
     }
   };
 
-  const resendVerification = async () => {
-    setError("");
-    setMessage("");
-    try {
-      const { data } = await apiClient.post(BASE_API.AUTH_RESEND_VERIFICATION, { email });
-      setMessage(data.message);
-    } catch (requestError) {
-      setError(requestError.response?.data?.message || "Unable to resend verification email.");
-    }
-  };
-
   return (
     <AuthCard title="Sign in">
       <p className="auth-description">Sign in to manage your crawlers.</p>
@@ -98,10 +87,7 @@ export function LoginPage() {
           {submitting ? "Signing in..." : "Sign in"}
         </button>
       </form>
-      <button className="auth-link-button" type="button" onClick={resendVerification}>
-        Resend verification email
-      </button>
-      <p className="auth-footer">Have an invitation? <Link to="/signup">Create an account</Link></p>
+      <p className="auth-footer">Need an account? <Link to="/signup">Create one</Link></p>
     </AuthCard>
   );
 }
@@ -110,7 +96,6 @@ export function SignupPage() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState("");
-  const [inviteToken, setInviteToken] = useState(searchParams.get("invite") || "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -133,7 +118,6 @@ export function SignupPage() {
       const { data } = await apiClient.post(BASE_API.AUTH_SIGNUP, {
         email,
         password,
-        inviteToken,
       });
       setMessage(data.message);
     } catch (requestError) {
@@ -145,9 +129,9 @@ export function SignupPage() {
 
   return (
     <AuthCard title="Create an account">
-      <p className="auth-description">Sign up with a valid invitation. Email verification is required.</p>
+      <p className="auth-description">Create an account. An administrator must approve it before you can sign in.</p>
       <form className="auth-form" onSubmit={submit}>
-        <label htmlFor="signup-email">Invited email</label>
+        <label htmlFor="signup-email">Email</label>
         <input
           id="signup-email"
           type="email"
@@ -155,14 +139,6 @@ export function SignupPage() {
           required
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-        />
-        <label htmlFor="signup-invite">Invitation code</label>
-        <input
-          id="signup-invite"
-          type="text"
-          required
-          value={inviteToken}
-          onChange={(event) => setInviteToken(event.target.value)}
         />
         <label htmlFor="signup-password">Password</label>
         <input
