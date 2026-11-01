@@ -34,6 +34,10 @@ export function syncCrawlerSchedule(crawlerCode, expression) {
         async () => {
             console.info(`Starting scheduled crawl for ${crawlerCode}`);
             try {
+                await Crawlers.updateOne(
+                    { crawlerCode },
+                    { $set: { lastScheduledRunAt: new Date() } },
+                );
                 await executeCrawler(crawlerCode);
                 console.info(`Scheduled crawl completed for ${crawlerCode}`);
             } catch (error) {

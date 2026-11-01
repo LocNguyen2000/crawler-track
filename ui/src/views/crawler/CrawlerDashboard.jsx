@@ -15,6 +15,17 @@ function dateDifference(value) {
   return `${Math.floor(hours / 24)} days ago.`;
 }
 
+function formatScheduledRun(value) {
+  if (!value) return "Never";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Ho_Chi_Minh",
+  }).format(date);
+}
+
 export default function CrawlerDashboard() {
   const [crawlers, setCrawlers] = useState([]);
   const [overview, setOverview] = useState({
@@ -59,6 +70,7 @@ export default function CrawlerDashboard() {
         crawler.description,
         crawler.selectorType,
         crawler.status,
+        crawler.lastScheduledRunAt,
       ]
         .join(" ")
         .toLowerCase()
@@ -183,6 +195,7 @@ export default function CrawlerDashboard() {
               <th className="m-th" style={{ width: 150 }}>Last modified</th>
               <th className="m-th" style={{ width: 120 }}>Performance (s)</th>
               <th className="m-th" style={{ width: 150 }}>Schedule</th>
+              <th className="m-th" style={{ width: 190 }}>Last scheduled run</th>
               <th className="m-th">Task</th>
             </tr>
           </thead>
@@ -218,6 +231,9 @@ export default function CrawlerDashboard() {
                 <td className="m-td text-align-center">
                   {crawler.cronExpression || "Manual"}
                 </td>
+                <td className="m-td text-align-center">
+                  {formatScheduledRun(crawler.lastScheduledRunAt)}
+                </td>
                 <td className="m-td flex align-center justify-center">
                   <button
                     className="btn-edit-data pr-2 cur-pointer plain-button"
@@ -244,7 +260,7 @@ export default function CrawlerDashboard() {
             ))}
             {visibleCrawlers.length === 0 && !loadError && (
               <tr className="m-tr">
-                <td className="m-td text-align-center" colSpan={11}>
+                <td className="m-td text-align-center" colSpan={12}>
                   No crawlers found.
                 </td>
               </tr>

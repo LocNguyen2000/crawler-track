@@ -26,6 +26,7 @@ const crawlerSchema = new mongoose.Schema({
     modifiedDate: { type: Date },
     performance: {type: String},
     cronExpression: { type: String, trim: true, default: "" },
+    lastScheduledRunAt: { type: Date },
     headless: { type: Boolean, default: process.env.PUPPETEER_HEADLESS === "true" }
 })
 
